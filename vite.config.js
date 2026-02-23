@@ -1,8 +1,9 @@
 import { svelte } from "@sveltejs/vite-plugin-svelte";
+import { defineConfig } from "vite";
 
-/** @type {import('vite').UserConfig} */
-const config = {
+// NOTE: update `base` if your repo name is different.
+// For a repo `https://github.com/<user>/ToxiTIGS`, GitHub Pages serves from `/ToxiTIGS/`.
+export default defineConfig({
+  base: "/ToxiTIGS/",
   plugins: [svelte()],
-};
-
-export default config;
+});
