@@ -2,7 +2,7 @@
 
 # 1. Configuration - Update these paths
 # MODEL_PATH="./ckpts/ga_train_lt_256/step_00000245"
-MODEL_PATH="./ckpts/unlearn_pcgrad_idknpo_feb21_epoch4"
+MODEL_PATH="./ckpts/unlearn_pcgrad_idknpo_feb22_epoch2"
 # MODEL_PATH="./ckpts/unlearn_pcgrad_ga_feb20_epoch2/step_00000490"
 # MODEL_PATH="gpt2"               # or path/to/your/checkpoint
 # or path/to/your/checkpoint
