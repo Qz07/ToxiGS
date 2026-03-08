@@ -1,10 +1,11 @@
 <script>
   const sections = [
-    { id: "intro", label: "Introduction" },
-    { id: "methods", label: "Methods" },
-    { id: "contrib", label: "Contributions" },
-    { id: "training", label: "Training Setup" },
-    { id: "logging", label: "Logging & Evaluation" }
+    { id: "overview", label: "Overview" },
+    { id: "method", label: "Method" },
+    { id: "experiments", label: "Experiments" },
+    { id: "results", label: "Results" },
+    { id: "discussion", label: "Discussion" },
+    { id: "paper-code", label: "Paper & Code" }
   ];
 
   const scrollToSection = (id) => {
@@ -16,23 +17,29 @@
 <main>
   <header class="hero">
     <div class="hero-content">
-      <h1>ToxiTIGS</h1>
-      <h2>Machine Unlearning for Toxicity Suppression in GPT-2</h2>
+      <h1>Detoxification via Gradient Surgery</h1>
+      <h2>Conflict-aware Machine Unlearning for Safer GPT-2</h2>
       <p class="hero-tagline">
-        Selectively unlearning toxic behaviors via IDK-style refusal alignment,
-        preference optimization, and gradient-surgery-aware training.
+        Large language models retain harmful behaviors from toxic training data.
+        We cast detoxification as a multi-task unlearning problem and apply
+        gradient surgery (PCGrad) to simultaneously suppress toxicity and
+        preserve language modeling ability.
       </p>
       <div class="hero-actions">
-        <button on:click={() => scrollToSection("intro")}>Read overview</button>
-        <button class="secondary" on:click={() => scrollToSection("methods")}>
-          Explore methods
+        <button on:click={() => scrollToSection("overview")}>Read overview</button>
+        <button class="secondary" on:click={() => scrollToSection("method")}>
+          Explore method
         </button>
       </div>
       <div class="hero-meta">
         <span>Model: GPT-2</span>
-        <span>Unlearning: IDK DPO/NPO</span>
+        <span>Unlearning: GradDiff &amp; idkDPO</span>
         <span>Optimization: PCGrad</span>
-        <span>Infrastructure: FSDP on 2× A5000</span>
+        <span>Dataset: ToxiGen + WikiText</span>
+      </div>
+      <div class="hero-authors">
+        <span>Qirui Zheng, Jun-Kun Wang</span>
+        <span>Halıcıoğlu Data Science Institute, UC San Diego</span>
       </div>
     </div>
   </header>
@@ -43,180 +50,224 @@
     {/each}
   </nav>
 
-  <section id="intro" class="section">
-    <h2>1. Introduction</h2>
+  <section id="overview" class="section">
+    <h2>1. Overview</h2>
     <p>
-      Large language models can reproduce unsafe or toxic continuations when
-      prompted with harmful content present in their training data. In
-      real-world settings like education, customer support, and public-sector
-      deployments, we often need models that are robust to such prompts and that
-      avoid generating harmful text.
+      Large language models are trained on web-scale corpora that contain
+      harmful and toxic content. After fine-tuning, these models can still
+      produce toxic generations, especially under adversarial prompts. Simply
+      retraining a foundation model on carefully filtered data is often
+      infeasible, motivating <strong>machine unlearning</strong> as a
+      post-training remedy.
     </p>
     <p>
-      This project studies <strong>machine unlearning for toxicity suppression</strong>
-      in autoregressive language models. The goal is <em>selective behavior
-      change</em>: the model should suppress undesirable responses to a targeted
-      <strong>forget set</strong> of prompts, while maintaining general language
-      modeling performance on a benign <strong>retain set</strong>.
+      We study <strong>detoxification via gradient surgery</strong> for
+      GPT-2-scale causal language models. The goal is to forget toxic behavior
+      on a designated <strong>forget set</strong> of examples while preserving
+      general language modeling ability on a <strong>retain set</strong>.
+      This creates inherently conflicting optimization objectives.
     </p>
     <p>
-      We frame toxic suppression as <strong>behavioral unlearning via refusal
-      alignment</strong>. On toxic prompts, the model learns to respond with a
-      short, consistent IDK-style answer such as “I don’t know.” On retain
-      prompts, it continues to train using standard next-token prediction.
+      Our key idea is to cast unlearning as a <strong>multi-task learning</strong>
+      problem with two tasks: (i) a forget objective that suppresses toxic or
+      targeted behavior, and (ii) a retain objective that keeps next-token
+      prediction performance high. We then apply <strong>PCGrad</strong> to
+      explicitly resolve gradient conflicts between these tasks.
     </p>
   </section>
 
-  <section id="methods" class="section two-col">
+  <section id="method" class="section two-col">
     <div>
-      <h2>2. Methods</h2>
-      <h3>2.1 Problem setup and data</h3>
+      <h2>2. Method</h2>
+      <h3>2.1 Problem setting</h3>
       <p>
-        We assume a dataset of triples <code>(prompt, generation, label)</code>
-        where <code>label = 1</code> marks toxic / forget prompts and
-        <code>label = 0</code> marks retain prompts.
+        We work with a causal language model <code>π_θ</code> and prompt-
+        completion pairs <code>(x, y)</code>. Prompt tokens serve as context,
+        and the loss is applied only on completion tokens so that we suppress
+        <em>toxic continuations</em> rather than erasing prompts themselves.
       </p>
       <ul>
         <li>
-          <strong>Retain set</strong>: benign prompts where we preserve and
-          improve standard language modeling behavior.
+          <strong>Forget set</strong> <code>D_f</code>: toxic prompts and
+          continuations whose behavior we want to unlearn.
         </li>
         <li>
-          <strong>Forget set</strong>: toxic prompts paired with toxic
-          continuations; the model learns to replace these with an IDK-style
-          refusal.
+          <strong>Retain set</strong> <code>D_r</code>: non-toxic or
+          utility-preserving data used to regularize against catastrophic
+          degradation.
         </li>
       </ul>
       <p>
-        For each forget prompt, we define a preferred completion
-        <code>y_idk</code> such as “I don’t know.” This becomes the
-        <em>chosen</em> response in a preference pair, with the original toxic
-        completion as the <em>rejected</em> response.
+        The base model is a GPT-2 language model fine-tuned on a 250k-example
+        corpus. All unlearning methods start from this checkpoint and are
+        trained using ToxiGen toxic examples for forgetting and WikiText for
+        utility evaluation.
       </p>
 
-      <h3>2.2 Model and reference policy</h3>
+      <h3>2.2 Unlearning as multi-task optimization</h3>
       <p>
-        We fine-tune a <strong>GPT-2</strong> causal language model
-        <code>π_θ(y|x)</code>. In addition, we keep a frozen
-        <strong>reference model</strong> <code>π_ref(y|x)</code> initialized
-        from the same checkpoint. This reference anchors the optimization and
-        stabilizes preference training.
+        Most unlearning methods decompose into a forget loss
+        <code>L_f(θ)</code> on <code>D_f</code> and a retain loss
+        <code>L_r(θ)</code> on <code>D_r</code>. We treat these as two
+        interacting tasks with gradients <code>g_f</code> and
+        <code>g_r</code>. When their inner product is negative, the objectives
+        conflict, and naïve joint optimization can cause
+        <strong>catastrophic collapse</strong> of model utility.
       </p>
     </div>
     <div>
-      <h3>2.3 Retain objective (masked SFT)</h3>
+      <h3>2.3 GradDiff</h3>
       <p>
-        On retain examples, we apply standard masked next-token cross-entropy.
-        Prompt tokens are masked out so that the loss is computed only over the
-        generation portion of the sequence. This preserves general utility and
-        fluency on benign inputs.
+        GradDiff combines gradient ascent on forget examples with standard
+        next-token training on retain data. It maximizes loss on toxic targets
+        so the model becomes worse at reproducing them, while minimizing loss
+        on benign data to preserve utility. This objective is simple but can be
+        unstable and prone to collapse.
       </p>
 
-      <h3>2.4 Forget objective (IDK preference optimization)</h3>
+      <h3>2.4 idkDPO</h3>
       <p>
-        On forget examples, we use a DPO/NPO-style
-        <strong>preference objective</strong> between the IDK refusal
-        <code>y⁺ = y_idk</code> and the toxic completion
-        <code>y⁻ = y_tox</code>. We compare relative sequence log probabilities
-        under the current model and the frozen reference and optimize a
-        logistic preference loss that increases the model’s preference for the
-        IDK refusal, while regularizing against drifting too far from
-        <code>π_ref</code>.
+        idkDPO is a preference-based unlearning method. For each toxic prompt
+        we construct a pair of responses: a safe "I don't know"-style
+        abstention and the original toxic continuation. A DPO-style objective
+        encourages the model to prefer the abstention while staying close to a
+        frozen reference model. This provides a strong inductive bias toward
+        safe refusals.
       </p>
     </div>
   </section>
 
-  <section id="contrib" class="section">
-    <h2>3. Key Contributions</h2>
-    <div class="cards">
-      <article class="card">
-        <h3>Targeted unlearning via IDK refusal</h3>
+
+    <section id="experiments" class="section two-col">
+      <div>
+        <h2>3. Experiments</h2>
+        <h3>3.1 Data</h3>
         <p>
-          A simple formulation that replaces toxic generations with a consistent
-          IDK-style refusal using a DPO/NPO-style preference loss, while
-          training normally on retain data.
+          Detoxification is evaluated on toxic language from the
+          <strong>ToxiGen</strong> benchmark, which includes adversarial and
+          implicit hate speech. ToxiGen provides prompts, toxic generations, and
+          labels; toxic examples define <code>D_f</code> and non-toxic examples
+          contribute to <code>D_r</code>.
         </p>
-      </article>
-      <article class="card">
-        <h3>Conflict-aware optimization with PCGrad</h3>
         <p>
-          We treat forgetting and retaining as two interacting objectives and
-          apply PCGrad to reduce destructive gradient interference when their
-          gradients conflict.
+          We further filter sequences to have at most 256 tokens, consistent
+          with the capacity of our GPT-2 model. Utility is measured on
+          <strong>WikiText</strong> word perplexity to track general language
+          modeling performance.
         </p>
-      </article>
-      <article class="card">
-        <h3>Scalable GPT-2 training stack</h3>
+        <h3>3.2 Training setup</h3>
+        <ul>
+          <li>Base model: GPT-2 fine-tuned on ~250k examples.</li>
+          <li>Hardware: 1 node with 2× NVIDIA A5000 GPUs.</li>
+          <li>Distributed training: PyTorch DDP + FSDP sharding.</li>
+          <li>Precision: mixed precision with gradient clipping.</li>
+        </ul>
+      </div>
+      <div>
+        <h3>3.3 Evaluation metrics</h3>
         <p>
-          The training pipeline uses FSDP on 2× A5000 GPUs with mixed
-          precision, enabling efficient large-batch training with full
-          experiment tracking.
+          We evaluate along three axes that together capture detoxification
+          quality and utility preservation:
         </p>
-      </article>
-    </div>
-  </section>
+        <ul>
+          <li>
+            <strong>Toxicity</strong>: mean toxicity score of generations under
+            a pretrained classifier (unitary/unbiased-toxic-roberta).
+          </li>
+          <li>
+            <strong>Utility</strong>: WikiText word perplexity as a proxy for
+            general language modeling ability.
+          </li>
+          <li>
+            <strong>Membership inference</strong>: token-level NLL on member and
+            non-member examples and ROC-AUC of an attack based on
+            <code>-NLL</code>.
+          </li>
+        </ul>
+      </div>
+    </section>
 
-  <section id="training" class="section two-col">
-    <div>
-      <h2>4. Joint training & PCGrad</h2>
+    <section id="results" class="section">
+      <h2>4. Results</h2>
+      <div class="cards">
+        <article class="card">
+          <h3>Toxicity vs. perplexity</h3>
+          <p>
+            All unlearning methods reduce toxicity relative to the fine-tuned
+            base model. GradDiff+PCGrad achieves the lowest toxicity score but
+            suffers from very high perplexity, indicating degraded language
+            modeling quality. In contrast, idkDPO and especially
+            idkDPO+PCGrad reduce toxicity while maintaining low WikiText
+            perplexity close to or better than the base model.
+          </p>
+        </article>
+        <article class="card">
+          <h3>Effect of PCGrad</h3>
+          <p>
+            Adding PCGrad consistently improves the toxicity–utility trade-off
+            within each objective family. For GradDiff, PCGrad further reduces
+            toxicity and somewhat improves perplexity. For idkDPO, PCGrad lowers
+            toxicity and slightly improves perplexity, yielding the strongest
+            overall balance.
+          </p>
+        </article>
+        <article class="card">
+          <h3>Membership inference</h3>
+          <p>
+            Membership inference results must be interpreted jointly with
+            utility. idkDPO and idkDPO+PCGrad move ROC-AUC away from the base
+            model while keeping member and non-member NLL close, suggesting more
+            controlled unlearning. GradDiff-based methods show extreme NLL
+            separation and ROC-AUC near zero, reflecting severe distributional
+            distortion rather than desirable privacy.
+          </p>
+        </article>
+      </div>
+    </section>
+
+    <section id="discussion" class="section two-col">
+      <div>
+        <h2>5. Discussion</h2>
+        <p>
+          Our results support viewing language model unlearning as a
+          multi-objective optimization problem. Forgetting toxic behavior and
+          preserving utility induce inherently conflicting gradients, and
+          conflict-aware optimization with PCGrad helps navigate this tension.
+        </p>
+        <p>
+          For unstable objectives like GradDiff, PCGrad mitigates but does not
+          eliminate collapse. For structured objectives like idkDPO, PCGrad is a
+          particularly effective enhancement, improving both toxicity and
+          perplexity.
+        </p>
+      </div>
+      <div>
+        <h3>Limitations & future work</h3>
+        <p>
+          Our study focuses on GPT-2-scale models and a detoxification setting
+          derived from ToxiGen. Future work includes scaling to larger
+          instruction-tuned models, extending to factual and privacy-driven
+          deletion tasks, and performing more mechanistic analyses of where
+          gradient conflict arises in the network.
+        </p>
+      </div>
+    </section>
+
+    <section id="paper-code" class="section">
+      <h2>6. Paper & Code</h2>
       <p>
-        A naïve joint objective simply sums the retain SFT loss and the forget
-        preference loss. In practice, their gradients can be negatively
-        aligned: aggressively improving the forget objective can harm retain
-        performance.
+        This website summarizes the paper <strong>"Detoxification via Gradient
+        Surgery"</strong> by Qirui Zheng and Jun-Kun Wang. The work studies
+        conflict-aware optimization for machine unlearning in language models.
       </p>
       <p>
-        To address this, we apply <strong>PCGrad</strong> (Projected Conflicting
-        Gradient). For each objective, we project away gradient components that
-        conflict with the other objective, then combine the projected gradients
-        to obtain the final update direction.
+        Code is available at:
+        <a href="https://github.com/Qz07/ToxiTIGS" target="_blank" rel="noreferrer">
+          github.com/Qz07/ToxiTIGS
+        </a>
+        .
       </p>
-      <p>
-        This conflict-aware optimization better preserves retain behavior while
-        still driving strong refusal alignment on forget prompts.
-      </p>
-    </div>
-
-    <div>
-      <h2>5. Training setup</h2>
-      <ul>
-        <li>
-          <strong>Model sharding</strong>: Fully Sharded Data Parallel (FSDP)
-          across two NVIDIA A5000 GPUs for parameter, gradient, and optimizer
-          state sharding.
-        </li>
-        <li>
-          <strong>Precision</strong>: mixed precision (fp16/bf16) with gradient
-          clipping for stability.
-        </li>
-        <li>
-          <strong>Batching</strong>: each step samples a forget batch for the
-          IDK preference loss and a retain batch for masked SFT, with tunable
-          weighting.
-        </li>
-        <li>
-          <strong>Optimizer</strong>: AdamW with a cosine learning-rate
-          schedule.
-        </li>
-      </ul>
-    </div>
-  </section>
-
-  <section id="logging" class="section">
-    <h2>6. Experiment logging & evaluation</h2>
-    <p>
-      Training is fully instrumented with <strong>Weights &amp; Biases</strong>
-      and <strong>tqdm</strong> progress bars. We log retain SFT loss and token
-      accuracy, forget preference loss, preference statistics (e.g., mean
-      log-prob chosen vs. rejected), total loss, learning rate, and throughput.
-    </p>
-    <p>
-      On top of these core signals, the evaluation protocol can be extended to
-      track toxicity scores, perplexity on retain-only corpora, truthfulness or
-      refusal ratios, and membership-inference-style diagnostics to probe how
-      much toxic behavior remains.
-    </p>
-  </section>
+    </section>
 
   <footer class="footer">
     <p>
@@ -326,6 +377,15 @@
     border: 1px solid rgba(56, 189, 248, 0.4);
   }
 
+  .hero-authors {
+    margin-top: 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    font-size: 0.85rem;
+    color: #cbd5f5;
+  }
+
   .top-nav {
     position: sticky;
     top: 0;
@@ -431,5 +491,14 @@
 
   .footer p {
     margin: 0;
+  }
+
+  a {
+    color: #38bdf8;
+    text-decoration: none;
+  }
+
+  a:hover {
+    text-decoration: underline;
   }
 </style>
