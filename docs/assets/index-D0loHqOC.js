@@ -64,8 +64,8 @@ var pe=Object.defineProperty;var ge=(e,t,s)=>t in e?pe(e,t,{enumerable:!0,config
             model while keeping member and non-member NLL close, suggesting more
             controlled unlearning. GradDiff-based methods show extreme NLL
             separation and ROC-AUC near zero, reflecting severe distributional
-            distortion rather than desirable privacy.</p></article></div> <div class="result-images svelte-9zhs3v"><figure class="svelte-9zhs3v"><img src="ToxiGS/assets/performance_utility.png" alt="Table showing toxicity score versus WikiText perplexity for different unlearning methods" class="svelte-9zhs3v"/> <figcaption class="svelte-9zhs3v">Quantitative trade-off between toxicity and WikiText perplexity for
-            the base model and all unlearning variants.</figcaption></figure> <figure class="svelte-9zhs3v"><img src="ToxiGS/assets/membership_inference.png" alt="Membership inference and ROC-AUC curves comparing methods" class="svelte-9zhs3v"/> <figcaption class="svelte-9zhs3v">Membership inference ROC curves and NLL separation, highlighting the
+            distortion rather than desirable privacy.</p></article></div> <div class="result-images svelte-9zhs3v"><figure class="svelte-9zhs3v"><img src="./performance_utility.png" alt="Table showing toxicity score versus WikiText perplexity for different unlearning methods" class="svelte-9zhs3v"/> <figcaption class="svelte-9zhs3v">Quantitative trade-off between toxicity and WikiText perplexity for
+            the base model and all unlearning variants.</figcaption></figure> <figure class="svelte-9zhs3v"><img src="./membership_inference.png" alt="Membership inference and ROC-AUC curves comparing methods" class="svelte-9zhs3v"/> <figcaption class="svelte-9zhs3v">Membership inference ROC curves and NLL separation, highlighting the
             difference between GradDiff-style and idkDPO-style unlearning.</figcaption></figure></div>`,ee=p(),O=r("section"),O.innerHTML=`<div><h2 class="svelte-9zhs3v">5. Discussion</h2> <p class="svelte-9zhs3v">Our results support viewing language model unlearning as a
           multi-objective optimization problem. Forgetting toxic behavior and
           preserving utility induce inherently conflicting gradients, and
@@ -79,7 +79,7 @@ var pe=Object.defineProperty;var ge=(e,t,s)=>t in e?pe(e,t,{enumerable:!0,config
           gradient conflict arises in the network.</p></div>`,te=p(),L=r("section"),L.innerHTML=`<h2 class="svelte-9zhs3v">6. Paper &amp; Code</h2> <p class="svelte-9zhs3v">This website summarizes the paper <strong>&quot;Detoxification via Gradient
         Surgery&quot;</strong> by Qirui Zheng and Jun-Kun Wang. The work studies
         conflict-aware optimization for machine unlearning in language models.</p> <p class="svelte-9zhs3v">You can read the full paper here:
-        <a href="ToxiGS/assets/ToxiGS_ver1.pdf" target="_blank" rel="noreferrer" class="svelte-9zhs3v">Download paper (PDF)</a>
+        <a href="./ToxiGS_ver1.pdf" target="_blank" rel="noreferrer" class="svelte-9zhs3v">Download paper (PDF)</a>
         .</p> <p class="svelte-9zhs3v">Code is available at:
         <a href="https://github.com/Qz07/ToxiGS" target="_blank" rel="noreferrer" class="svelte-9zhs3v">github.com/Qz07/ToxiGS</a>
         .</p>`,se=p(),j=r("footer"),j.innerHTML=`<p class="svelte-9zhs3v">ToxiTIGS — Machine Unlearning for Toxicity Suppression in GPT-2.
