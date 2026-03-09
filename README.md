@@ -36,14 +36,13 @@ Repository layout
 Data format
 -----------
 
-Most training and unlearning scripts expect a pickle file containing either a list or dict of
-examples with the following keys:
+Most training and unlearning scripts expect a pickle file containing a list of dictionaries with the following keys:
 
 - prompt: input prompt string
 - generation: model generation string
 - label: int, typically 1 for toxic / forget and 0 for retain
 
-For toxicity evaluation, eval/evaluation.py expects a pickle file with a list of dicts containing:
+For toxicity evaluation, eval/evaluation.py expects a pickle file with a list of dicts containing the following key:
 
 - text: prompt string to feed into the model
 
@@ -59,8 +58,8 @@ Environment and dependencies
 We recommend using conda with the provided requirements.txt:
 
 ```bash
-conda create -n toxitigs python=3.10 -y
-conda activate toxitigs
+conda create -n toxigs python=3.10 -y
+conda activate toxigs
 pip install -r requirements.txt
 ```
 
