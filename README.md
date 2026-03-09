@@ -1,4 +1,4 @@
-ToxiTIGS
+ToxiGS
 ========
 
 This repository contains code for training and unlearning toxicity in GPT‑2 style language models.
