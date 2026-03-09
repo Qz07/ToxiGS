@@ -226,7 +226,7 @@
 
       <div class="result-images">
         <figure>
-          <img src="/ToxiTIGS/assets/performance_utility.png" alt="Table showing toxicity score versus WikiText perplexity for different unlearning methods" />
+          <img src="performance_utility.png" alt="Table showing toxicity score versus WikiText perplexity for different unlearning methods" />
           <figcaption>
             Quantitative trade-off between toxicity and WikiText perplexity for
             the base model and all unlearning variants.
@@ -234,7 +234,7 @@
         </figure>
 
         <figure>
-          <img src="/ToxiTIGS/assets/membership_inference.png" alt="Membership inference and ROC-AUC curves comparing methods" />
+          <img src="membership_inference.png" alt="Membership inference and ROC-AUC curves comparing methods" />
           <figcaption>
             Membership inference ROC curves and NLL separation, highlighting the
             difference between GradDiff-style and idkDPO-style unlearning.
@@ -275,7 +275,7 @@
       <h2>6. Paper & Code</h2>
       <p>
         You can read the full paper here:
-        <a href="/ToxiTIGS/assets/ToxiGS_ver1.pdf" target="_blank" rel="noreferrer">
+        <a href="ToxiGS_ver1.pdf" target="_blank" rel="noreferrer">
           Download paper (PDF)
         </a>
         .
