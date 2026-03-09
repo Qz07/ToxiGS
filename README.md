@@ -56,13 +56,12 @@ Environment and dependencies
 - transformers, peft, datasets‑style tooling
 - wandb (optional, can be disabled if not installed)
 
-A simple way to set up an environment is:
+We recommend using conda with the provided requirements.txt:
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121  # or CPU wheel
-pip install transformers peft tqdm wandb numpy
+conda create -n toxitigs python=3.10 -y
+conda activate toxitigs
+pip install -r requirements.txt
 ```
 
 
