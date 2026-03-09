@@ -77,7 +77,7 @@ var Y=Object.defineProperty;var Z=(e,t,o)=>t in e?Y(e,t,{enumerable:!0,configura
           instruction-tuned models, extending to factual and privacy-driven
           deletion tasks, and performing more mechanistic analyses of where
           gradient conflict arises in the network.</p></div>`,N=b(),T=p("section"),T.innerHTML=`<h2 class="svelte-8oho01">6. Paper &amp; Code</h2> <p class="svelte-8oho01">You can read the full paper here:
-        <a href="ToxiGS_ver2.pdf" target="_blank" rel="noreferrer" class="svelte-8oho01">Download paper (PDF)</a>
+        <a href="ToxiGS.pdf" target="_blank" rel="noreferrer" class="svelte-8oho01">Download paper (PDF)</a>
         .</p> <p class="svelte-8oho01">Code is available at:
         <a href="https://github.com/Qz07/ToxiGS" target="_blank" rel="noreferrer" class="svelte-8oho01">github.com/Qz07/ToxiGS</a>
         .</p>`,z=b(),O=p("footer"),O.innerHTML=`<p class="svelte-8oho01">ToxiTIGS — Machine Unlearning for Toxicity Suppression in GPT-2.

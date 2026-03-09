@@ -269,7 +269,7 @@
       <h2>6. Paper & Code</h2>
       <p>
         You can read the full paper here:
-        <a href="ToxiGS_ver1.pdf" target="_blank" rel="noreferrer">
+        <a href="ToxiGS.pdf" target="_blank" rel="noreferrer">
           Download paper (PDF)
         </a>
         .
