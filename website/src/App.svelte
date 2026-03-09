@@ -270,7 +270,7 @@
       <p>
         You can read the full paper here:
         <a href="ToxiGS.pdf" target="_blank" rel="noreferrer">
-          Download paper (PDF)
+          View paper (PDF)
         </a>
         .
       </p>
@@ -278,6 +278,13 @@
         Code is available at:
         <a href="https://github.com/Qz07/ToxiGS" target="_blank" rel="noreferrer">
           github.com/Qz07/ToxiGS
+        </a>
+        .
+      </p>
+      <p>
+        The poster is avaliable here:
+        <a href="poster.pdf" target="_blank" rel="noreferrer">
+          View poster (PDF)
         </a>
         .
       </p>
