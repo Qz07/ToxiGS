@@ -10,7 +10,7 @@ Dataset:
 Unlearning:
 - forget set: label == 1  -> gradient ASCENT (maximize loss on generation tokens)
 - retain set: label == 0  -> (optional) normal gradient DESCENT to preserve utility
-  By default retain_weight=0 => simplest "GA only on forget set".
+  By default retain_weight=0 => simplest "GradDiff only on forget set".
 
 Checkpoint:
 - Pass --model_name_or_path as either:
@@ -24,6 +24,7 @@ FSDP:
 
 from __future__ import annotations
 import os
+
 os.environ["TRANSFORMERS_NO_TORCHVISION"] = "1"
 import argparse
 import json
@@ -60,14 +61,15 @@ from torch.distributed.fsdp.wrap import transformer_auto_wrap_policy
 from functools import partial
 
 
-
-
 # ----------------------------
 # Utilities
 # ----------------------------
 
+
 def is_rank0() -> bool:
-    return (not dist.is_available()) or (not dist.is_initialized()) or dist.get_rank() == 0
+    return (
+        (not dist.is_available()) or (not dist.is_initialized()) or dist.get_rank() == 0
+    )
 
 
 def setup_distributed() -> Tuple[int, int, int]:
@@ -128,6 +130,7 @@ def safe_barrier():
 # Dataset
 # ----------------------------
 
+
 @dataclass
 class Example:
     prompt: str
@@ -145,7 +148,9 @@ class PicklePromptGenDataset(Dataset):
         elif isinstance(obj, list):
             items = obj
         else:
-            raise ValueError(f"Unsupported pickle type: {type(obj)} (expect list or dict)")
+            raise ValueError(
+                f"Unsupported pickle type: {type(obj)} (expect list or dict)"
+            )
 
         filtered: List[Example] = []
         for d in items:
@@ -155,10 +160,18 @@ class PicklePromptGenDataset(Dataset):
                 continue
             if int(d["label"]) != int(target_label):
                 continue
-            filtered.append(Example(prompt=str(d["prompt"]), generation=str(d["generation"]), label=int(d["label"])))
+            filtered.append(
+                Example(
+                    prompt=str(d["prompt"]),
+                    generation=str(d["generation"]),
+                    label=int(d["label"]),
+                )
+            )
 
         if len(filtered) == 0:
-            raise ValueError(f"No examples found with label={target_label} in {data_path}")
+            raise ValueError(
+                f"No examples found with label={target_label} in {data_path}"
+            )
 
         self.data = filtered
 
@@ -182,7 +195,9 @@ def build_prompt_gen_features(
       - prioritize keeping generation tokens; truncate prompt first from the left.
     """
     prompt_ids = tokenizer.encode(ex.prompt, add_special_tokens=False)
-    gen_text = ex.generation + (tokenizer.eos_token if (add_eos and tokenizer.eos_token is not None) else "")
+    gen_text = ex.generation + (
+        tokenizer.eos_token if (add_eos and tokenizer.eos_token is not None) else ""
+    )
     gen_ids = tokenizer.encode(gen_text, add_special_tokens=False)
 
     # If generation alone too long, keep last seq_len tokens of generation
@@ -224,7 +239,9 @@ class Collator:
         self.seq_len = seq_len
 
     def __call__(self, batch: List[Example]) -> Dict[str, torch.Tensor]:
-        feats = [build_prompt_gen_features(ex, self.tokenizer, self.seq_len) for ex in batch]
+        feats = [
+            build_prompt_gen_features(ex, self.tokenizer, self.seq_len) for ex in batch
+        ]
         return {
             "input_ids": torch.stack([f["input_ids"] for f in feats], dim=0),
             "attention_mask": torch.stack([f["attention_mask"] for f in feats], dim=0),
@@ -235,6 +252,7 @@ class Collator:
 # ----------------------------
 # Model / FSDP
 # ----------------------------
+
 
 def load_model_and_tokenizer(
     model_name_or_path: str,
@@ -297,6 +315,7 @@ def wrap_fsdp(model: torch.nn.Module, bf16: bool = True) -> torch.nn.Module:
     block_cls = set()
     try:
         from transformers.models.gpt2.modeling_gpt2 import GPT2Block
+
         block_cls = {GPT2Block}
     except Exception:
         block_cls = set()
@@ -310,7 +329,9 @@ def wrap_fsdp(model: torch.nn.Module, bf16: bool = True) -> torch.nn.Module:
     # IMPORTANT: make a policy via partial (newer torch API shape)
     auto_wrap_policy = None
     if block_cls:
-        auto_wrap_policy = partial(transformer_auto_wrap_policy, transformer_layer_cls=block_cls)
+        auto_wrap_policy = partial(
+            transformer_auto_wrap_policy, transformer_layer_cls=block_cls
+        )
 
     # If we couldn't import GPT2Block, wrap whole model
     return FSDP(
@@ -321,9 +342,11 @@ def wrap_fsdp(model: torch.nn.Module, bf16: bool = True) -> torch.nn.Module:
         device_id=torch.cuda.current_device(),
     )
 
+
 # ----------------------------
 # Checkpoint save/load
 # ----------------------------
+
 
 def save_checkpoint(
     model: FSDP,
@@ -391,11 +414,27 @@ def try_resume_optimizer_scheduler(
 # Main train
 # ----------------------------
 
+
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--data_path", type=str, required=True, help="Pickle with list/dict of {prompt,generation,label}")
-    ap.add_argument("--model_name_or_path", type=str, required=True, help="HF name OR checkpoint directory")
-    ap.add_argument("--base_model", type=str, default="gpt2", help="Base model if loading from raw state dict dir")
+    ap.add_argument(
+        "--data_path",
+        type=str,
+        required=True,
+        help="Pickle with list/dict of {prompt,generation,label}",
+    )
+    ap.add_argument(
+        "--model_name_or_path",
+        type=str,
+        required=True,
+        help="HF name OR checkpoint directory",
+    )
+    ap.add_argument(
+        "--base_model",
+        type=str,
+        default="gpt2",
+        help="Base model if loading from raw state dict dir",
+    )
     ap.add_argument("--output_dir", type=str, required=True)
 
     ap.add_argument("--seq_len", type=int, default=512)
@@ -408,11 +447,23 @@ def main():
     ap.add_argument("--max_grad_norm", type=float, default=1.0)
 
     # Unlearning weights
-    ap.add_argument("--forget_weight", type=float, default=1.0, help="Weight for GA on forget loss")
-    ap.add_argument("--retain_weight", type=float, default=0.0, help="Weight for GD on retain loss (0 = GA only)")
+    ap.add_argument(
+        "--forget_weight",
+        type=float,
+        default=1.0,
+        help="Weight for GradDiff on forget loss",
+    )
+    ap.add_argument(
+        "--retain_weight",
+        type=float,
+        default=0.0,
+        help="Weight for GD on retain loss (0 = GradDiff only)",
+    )
 
     # Scheduler
-    ap.add_argument("--scheduler", type=str, default="cosine", choices=["cosine", "linear", "none"])
+    ap.add_argument(
+        "--scheduler", type=str, default="cosine", choices=["cosine", "linear", "none"]
+    )
     ap.add_argument("--warmup_steps", type=int, default=100)
 
     # Resume optimizer/scheduler from checkpoint dir (if present)
@@ -439,6 +490,7 @@ def main():
     if is_rank0():
         try:
             import wandb as _wandb
+
             wandb = _wandb
             wandb.init(
                 project=args.wandb_project,
@@ -464,11 +516,17 @@ def main():
 
     # Build datasets
     forget_ds = PicklePromptGenDataset(args.data_path, target_label=1)
-    retain_ds = PicklePromptGenDataset(args.data_path, target_label=0) if args.retain_weight > 0 else None
+    retain_ds = (
+        PicklePromptGenDataset(args.data_path, target_label=0)
+        if args.retain_weight > 0
+        else None
+    )
 
     collate = Collator(tokenizer, args.seq_len)
 
-    forget_sampler = DistributedSampler(forget_ds, num_replicas=world, rank=rank, shuffle=True)
+    forget_sampler = DistributedSampler(
+        forget_ds, num_replicas=world, rank=rank, shuffle=True
+    )
     forget_loader = DataLoader(
         forget_ds,
         batch_size=args.batch_size,
@@ -480,7 +538,9 @@ def main():
     )
 
     if retain_ds is not None:
-        retain_sampler = DistributedSampler(retain_ds, num_replicas=world, rank=rank, shuffle=True)
+        retain_sampler = DistributedSampler(
+            retain_ds, num_replicas=world, rank=rank, shuffle=True
+        )
         retain_loader = DataLoader(
             retain_ds,
             batch_size=args.batch_size,
@@ -495,7 +555,9 @@ def main():
         retain_sampler = None
 
     # Optimizer / scheduler
-    optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+    optimizer = torch.optim.AdamW(
+        model.parameters(), lr=args.lr, weight_decay=args.weight_decay
+    )
 
     # total steps (rough estimate; for cosine schedule)
     steps_per_epoch = math.ceil(len(forget_loader) / args.grad_accum)
@@ -504,9 +566,13 @@ def main():
     if args.scheduler == "none":
         scheduler = None
     elif args.scheduler == "linear":
-        scheduler = get_linear_schedule_with_warmup(optimizer, args.warmup_steps, total_steps)
+        scheduler = get_linear_schedule_with_warmup(
+            optimizer, args.warmup_steps, total_steps
+        )
     else:
-        scheduler = get_cosine_schedule_with_warmup(optimizer, args.warmup_steps, total_steps)
+        scheduler = get_cosine_schedule_with_warmup(
+            optimizer, args.warmup_steps, total_steps
+        )
 
     # If the input is a checkpoint dir and user wants to resume optimizer/scheduler
     ckpt_dir = Path(args.model_name_or_path)
@@ -522,7 +588,9 @@ def main():
         print(f"[data] forget: {len(forget_ds)} examples")
         if retain_ds is not None:
             print(f"[data] retain: {len(retain_ds)} examples")
-        print(f"[train] start_epoch={start_epoch} global_step={global_step} total_steps~={total_steps}")
+        print(
+            f"[train] start_epoch={start_epoch} global_step={global_step} total_steps~={total_steps}"
+        )
 
     # Training loop
     model.train()
@@ -540,7 +608,9 @@ def main():
         pbar = tqdm(forget_loader, disable=not is_rank0(), desc=f"epoch {epoch}")
         for it, batch_forget in enumerate(pbar):
             # Move to GPU
-            batch_forget = {k: v.cuda(non_blocking=True) for k, v in batch_forget.items()}
+            batch_forget = {
+                k: v.cuda(non_blocking=True) for k, v in batch_forget.items()
+            }
 
             # Forget loss (generation-token-only labels already set)
             out_f = model(**batch_forget)
@@ -557,7 +627,9 @@ def main():
                     retain_iter = iter(retain_loader)
                     batch_retain = next(retain_iter)
 
-                batch_retain = {k: v.cuda(non_blocking=True) for k, v in batch_retain.items()}
+                batch_retain = {
+                    k: v.cuda(non_blocking=True) for k, v in batch_retain.items()
+                }
                 out_r = model(**batch_retain)
                 retain_loss = out_r.loss
                 total_loss = total_loss + (args.retain_weight * retain_loss)
@@ -594,7 +666,13 @@ def main():
                         log["retain_loss"] = float(retain_loss.detach().cpu())
 
                     if is_rank0():
-                        pbar.set_postfix({k: f"{v:.4f}" if isinstance(v, float) else v for k, v in log.items() if k != "step"})
+                        pbar.set_postfix(
+                            {
+                                k: f"{v:.4f}" if isinstance(v, float) else v
+                                for k, v in log.items()
+                                if k != "step"
+                            }
+                        )
                         if wandb is not None:
                             wandb.log(log, step=global_step)
 

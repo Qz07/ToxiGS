@@ -16,9 +16,9 @@ Repository layout
 
 - train/ – training and unlearning code
 	- gpt2-train.py – FSDP next‑token pretraining / finetuning on a pickle dataset
-	- unlearn_ga.py – gradient‑ascent unlearning on label=1 examples (optionally mixed with retain loss)
-	- unlearn_idknpo.py – IdkDPO unlearning that pushes toxic generations toward an "I don't know" response
-	- PCGrad_GA.py, PCGrad_idknpo.py – PCGrad versions of GA and IdkDPO unlearning
+	- unlearn_graddiff.py – gradient‑ascent unlearning on label=1 examples (optionally mixed with retain loss)
+	- unlearn_idkdpo.py – IdkDPO unlearning that pushes toxic generations toward an "I don't know" response
+	- PCGrad_gradDiff.py, PCGrad_idkdpo.py – PCGrad versions of GradDiff and IdkDPO unlearning
 - eval/ – evaluation utilities
 	- inference_utils.py – shared inference helpers
 	- evaluation.py – generate completions and score toxicity with a classifier
@@ -26,7 +26,7 @@ Repository layout
 	- run_mmlu.py – MMLU evaluation for a given checkpoint
 - scripts/ – convenience shell scripts
 	- run_train.sh – baseline GPT‑2 training
-	- run_unlearn.sh – example GA / IdkDPO unlearning runs
+	- run_unlearn.sh – example GradDiff / IdkDPO unlearning runs
 	- run_pcgrad.sh – PCGrad IdkDPO unlearning
 	- run_eval.sh – toxicity + perplexity evaluation
 	- run_mmlu.sh – MMLU evaluation wrapper
@@ -95,7 +95,7 @@ Gradient‑ascent unlearning (GA):
 
 ```bash
 cd train
-torchrun --nproc_per_node=1 unlearn_ga.py \
+torchrun --nproc_per_node=1 unlearn_graddiff.py \
 	--data_path ../data/jan26_filter_lt_256_248k.pickle \
 	--model_name_or_path ../ckpts/train_lt_256/step_00000484 \
 	--base_model gpt2 \
@@ -107,12 +107,12 @@ torchrun --nproc_per_node=1 unlearn_ga.py \
 IdkDPO + PCGrad:
 
 ```bash
-torchrun --standalone --nproc_per_node=2 PCGrad_idknpo.py \
+torchrun --standalone --nproc_per_node=2 PCGrad_idkdpo.py \
 	--data_path ./data/jan26_filter_lt_256_248k.pickle \
 	--ckpt_dir ./ckpts/train_lt_256/step_00000484 \
 	--ft_filename pytorch_model.bin \
 	--base_model gpt2 \
-	--output_dir ./ckpts/unlearn_pcgrad_idknpo_feb22_epoch2 \
+	--output_dir ./ckpts/unlearn_pcgrad_idkdpo_feb22_epoch2 \
 	--bf16 --max_length 256 --batch_size_retain 16 --batch_size_forget 16 \
 	--grad_accum 8 --epochs 2 --lr 2e-5 --warmup_steps 50 \
 	--beta 0.1 --dpo_coef 1.0 --retain_coef 1.0

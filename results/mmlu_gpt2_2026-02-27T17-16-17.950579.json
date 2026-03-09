@@ -59,7 +59,7 @@
       "should_decontaminate": false,
       "metadata": {
         "version": 1.0,
-        "pretrained": "/home/q7zheng/ToxiTIGS/ckpts/idknpo_out_gpt2_feb8_2epoch_hf",
+        "pretrained": "/home/q7zheng/ToxiTIGS/ckpts/idkdpo_out_gpt2_feb8_2epoch_hf",
         "dtype": "float16"
       }
     }
@@ -85,7 +85,7 @@
   "config": {
     "model": "hf",
     "model_args": {
-      "pretrained": "/home/q7zheng/ToxiTIGS/ckpts/idknpo_out_gpt2_feb8_2epoch_hf",
+      "pretrained": "/home/q7zheng/ToxiTIGS/ckpts/idkdpo_out_gpt2_feb8_2epoch_hf",
       "dtype": "float16"
     },
     "model_num_parameters": 124439808,
@@ -128,8 +128,8 @@
   "max_length": 1024,
   "task_hashes": {},
   "model_source": "hf",
-  "model_name": "/home/q7zheng/ToxiTIGS/ckpts/idknpo_out_gpt2_feb8_2epoch_hf",
-  "model_name_sanitized": "__home__q7zheng__ToxiTIGS__ckpts__idknpo_out_gpt2_feb8_2epoch_hf",
+  "model_name": "/home/q7zheng/ToxiTIGS/ckpts/idkdpo_out_gpt2_feb8_2epoch_hf",
+  "model_name_sanitized": "__home__q7zheng__ToxiTIGS__ckpts__idkdpo_out_gpt2_feb8_2epoch_hf",
   "system_instruction": null,
   "system_instruction_sha": null,
   "fewshot_as_multiturn": null,

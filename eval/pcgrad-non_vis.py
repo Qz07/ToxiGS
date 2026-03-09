@@ -11,11 +11,11 @@ Produces:
 Example:
   python compare_pcgrad_vs_nonpcgrad.py \
     --base_model gpt2 \
-    --non_ckpt ./ckpts/GA \
+    --non_ckpt ./ckpts/GradDiff \
     --pc_ckpt  ./ckpts/GA_PCGRAD \
     --out_dir  ./viz/GA_vs_GA_PCGRAD
 
-Run it again for your other pair(s), e.g. idkDPO vs idkNPO-pcgrad (or whichever is your intended non/pc pairing).
+Run it again for your other pair(s), e.g. idkDPO vs idkdpo-pcgrad (or whichever is your intended non/pc pairing).
 """
 
 import argparse
@@ -36,13 +36,15 @@ import matplotlib.pyplot as plt
 # Grouping / parsing utilities
 # ----------------------------
 
+
 @dataclass(frozen=True)
 class GroupKey:
-    layer: int   # -1 for non-block params (embeddings, ln_f, lm_head)
+    layer: int  # -1 for non-block params (embeddings, ln_f, lm_head)
     module: str  # coarse bucket
 
 
 _LAY_RE = re.compile(r"^transformer\.h\.(\d+)\.(.*)$")
+
 
 def bucket_param(name: str) -> GroupKey:
     """
@@ -90,7 +92,20 @@ def bucket_param(name: str) -> GroupKey:
 def sorted_modules_present(keys: List[GroupKey]) -> List[str]:
     mods = sorted(set(k.module for k in keys))
     # nicer ordering if present
-    preferred = ["emb_wte","emb_wpe","ln_f","attn_qkv","attn_out","mlp_in","mlp_out","ln_1","ln_2","other","lm_head","other_global"]
+    preferred = [
+        "emb_wte",
+        "emb_wpe",
+        "ln_f",
+        "attn_qkv",
+        "attn_out",
+        "mlp_in",
+        "mlp_out",
+        "ln_1",
+        "ln_2",
+        "other",
+        "lm_head",
+        "other_global",
+    ]
     out = [m for m in preferred if m in mods] + [m for m in mods if m not in preferred]
     return out
 
@@ -98,6 +113,7 @@ def sorted_modules_present(keys: List[GroupKey]) -> List[str]:
 # ----------------------------
 # Core math (streaming)
 # ----------------------------
+
 
 @dataclass
 class Accum:
@@ -124,18 +140,22 @@ def load_state_dict(model_name_or_path: str) -> Dict[str, torch.Tensor]:
     Loads a HF causal LM and returns its state_dict on CPU.
     Works for HF model names or checkpoint directories.
     """
-    model = AutoModelForCausalLM.from_pretrained(model_name_or_path, torch_dtype=torch.float32, device_map=None)
+    model = AutoModelForCausalLM.from_pretrained(
+        model_name_or_path, torch_dtype=torch.float32, device_map=None
+    )
     model.eval()
     sd = {k: v.detach().cpu() for k, v in model.state_dict().items()}
     del model
     return sd
 
 
-def compare_checkpoints(base_sd: Dict[str, torch.Tensor],
-                        non_sd: Dict[str, torch.Tensor],
-                        pc_sd: Dict[str, torch.Tensor],
-                        ignore_regex: str = r"^lm_head\.weight$",
-                        eps: float = 1e-12) -> Tuple[Dict[GroupKey, Accum], List[GroupKey]]:
+def compare_checkpoints(
+    base_sd: Dict[str, torch.Tensor],
+    non_sd: Dict[str, torch.Tensor],
+    pc_sd: Dict[str, torch.Tensor],
+    ignore_regex: str = r"^lm_head\.weight$",
+    eps: float = 1e-12,
+) -> Tuple[Dict[GroupKey, Accum], List[GroupKey]]:
     """
     Streaming accumulation over parameters:
       Δ_non = non - base
@@ -164,7 +184,7 @@ def compare_checkpoints(base_sd: Dict[str, torch.Tensor],
 
         dn = (n - b).view(-1)
         dp = (p - b).view(-1)
-        dd = (dp - dn)
+        dd = dp - dn
 
         gk = bucket_param(k)
         a = acc[gk]
@@ -198,6 +218,7 @@ def cosine(dot: float, sumsq_a: float, sumsq_b: float, eps: float = 1e-12) -> fl
 # ----------------------------
 # Plotting
 # ----------------------------
+
 
 def ensure_dir(d: str) -> None:
     os.makedirs(d, exist_ok=True)
@@ -241,13 +262,26 @@ def write_csv(rows: List[Dict[str, str]], outpath: str) -> None:
 # Main
 # ----------------------------
 
+
 def parse_args():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--base_model", required=True, help="HF model name or path for the *common base* (e.g., gpt2)")
-    ap.add_argument("--non_ckpt", required=True, help="Non-PCGrad checkpoint (HF dir or model id)")
-    ap.add_argument("--pc_ckpt", required=True, help="PCGrad checkpoint (HF dir or model id)")
+    ap.add_argument(
+        "--base_model",
+        required=True,
+        help="HF model name or path for the *common base* (e.g., gpt2)",
+    )
+    ap.add_argument(
+        "--non_ckpt", required=True, help="Non-PCGrad checkpoint (HF dir or model id)"
+    )
+    ap.add_argument(
+        "--pc_ckpt", required=True, help="PCGrad checkpoint (HF dir or model id)"
+    )
     ap.add_argument("--out_dir", required=True, help="Output directory for figures/csv")
-    ap.add_argument("--ignore_regex", default=r"^lm_head\.weight$", help="Regex of params to ignore (default skips tied lm_head)")
+    ap.add_argument(
+        "--ignore_regex",
+        default=r"^lm_head\.weight$",
+        help="Regex of params to ignore (default skips tied lm_head)",
+    )
     return ap.parse_args()
 
 
@@ -263,7 +297,9 @@ def main():
     pc_sd = load_state_dict(args.pc_ckpt)
 
     print("Computing grouped stats...")
-    acc, gkeys = compare_checkpoints(base_sd, non_sd, pc_sd, ignore_regex=args.ignore_regex)
+    acc, gkeys = compare_checkpoints(
+        base_sd, non_sd, pc_sd, ignore_regex=args.ignore_regex
+    )
 
     # Build layer list and module list
     layers = sorted(set(k.layer for k in gkeys))
@@ -294,15 +330,17 @@ def main():
             r = rms(a.sumsq_diff, a.count)
             heat[li][mi] = math.log10(r + 1e-12)
 
-            rows.append({
-                "layer": str(layer),
-                "module": mod,
-                "rms_delta_diff": f"{r:.6e}",
-                "log10_rms_delta_diff": f"{math.log10(r + 1e-12):.6f}",
-                "cos_delta_pc_vs_non": f"{cosine(a.dot, a.sumsq_pc, a.sumsq_non):.6f}",
-                "rms_delta_pc": f"{math.sqrt(max(a.sumsq_delta_pc / max(a.count,1), 1e-12)):.6e}",
-                "rms_delta_non": f"{math.sqrt(max(a.sumsq_delta_non / max(a.count,1), 1e-12)):.6e}",
-            })
+            rows.append(
+                {
+                    "layer": str(layer),
+                    "module": mod,
+                    "rms_delta_diff": f"{r:.6e}",
+                    "log10_rms_delta_diff": f"{math.log10(r + 1e-12):.6f}",
+                    "cos_delta_pc_vs_non": f"{cosine(a.dot, a.sumsq_pc, a.sumsq_non):.6f}",
+                    "rms_delta_pc": f"{math.sqrt(max(a.sumsq_delta_pc / max(a.count,1), 1e-12)):.6e}",
+                    "rms_delta_non": f"{math.sqrt(max(a.sumsq_delta_non / max(a.count,1), 1e-12)):.6e}",
+                }
+            )
 
             layer_dot += a.dot
             layer_sumsq_pc += a.sumsq_pc
@@ -325,13 +363,15 @@ def main():
     print(f"Wrote: {csv_path}")
 
     # Plots
-    heat_path = os.path.join(args.out_dir, "heatmap_log10_rms_deltaDiff_perLayerModule.png")
+    heat_path = os.path.join(
+        args.out_dir, "heatmap_log10_rms_deltaDiff_perLayerModule.png"
+    )
     plot_heatmap(
         matrix=heat,
         xlabels=modules,
         ylabels=[str(l) for l in layers],
         title="log10 RMS( (Δ_pcgrad - Δ_nonpcgrad) ) per layer/module",
-        outpath=heat_path
+        outpath=heat_path,
     )
     print(f"Wrote: {heat_path}")
 
@@ -347,10 +387,10 @@ def main():
         title="Layerwise alignment of updates",
         xlabel="Layer index in this plot (see tick labels)",
         ylabel="Cosine similarity",
-        outpath=cos_path
+        outpath=cos_path,
     )
     # add tick labels by saving a second figure with labels for readability
-    plt.figure(figsize=(10,5))
+    plt.figure(figsize=(10, 5))
     plt.plot(x, cos_per_layer, label="cos(Δ_pcgrad, Δ_nonpcgrad)")
     plt.xticks(x, layer_labels, rotation=45, ha="right")
     plt.title("Layerwise alignment of updates")
@@ -358,14 +398,16 @@ def main():
     plt.ylabel("Cosine similarity")
     plt.legend()
     plt.tight_layout()
-    labeled_cos_path = os.path.join(args.out_dir, "layerwise_cosine_deltaPC_vs_deltaNon_labeled.png")
+    labeled_cos_path = os.path.join(
+        args.out_dir, "layerwise_cosine_deltaPC_vs_deltaNon_labeled.png"
+    )
     plt.savefig(labeled_cos_path, dpi=200)
     plt.close()
     print(f"Wrote: {cos_path}")
     print(f"Wrote: {labeled_cos_path}")
 
     ratio_path = os.path.join(args.out_dir, "layerwise_log10_rmsRatio_pc_over_non.png")
-    plt.figure(figsize=(10,5))
+    plt.figure(figsize=(10, 5))
     plt.plot(x, ratio_per_layer, label="log10( RMS(Δ_pcgrad) / RMS(Δ_nonpcgrad) )")
     plt.xticks(x, layer_labels, rotation=45, ha="right")
     plt.title("Layerwise relative update size (PCGrad vs non-PCGrad)")

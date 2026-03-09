@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-FSDP + PCGrad IdkDPO (IdkNPO-style) for GPT-2 (2 GPUs)
+FSDP + PCGrad IdkDPO (idkdpo-style) for GPT-2 (2 GPUs)
 
 You have two objectives:
   (A) retain objective (label=0): standard next-token SFT on the provided generation
@@ -68,36 +68,44 @@ from transformers.models.gpt2.modeling_gpt2 import GPT2Block
 # Distributed utils
 # ----------------------------
 
+
 def is_dist() -> bool:
     return dist.is_available() and dist.is_initialized()
 
+
 def is_main() -> bool:
     return (not is_dist()) or dist.get_rank() == 0
+
 
 def setup_distributed():
     if dist.is_available() and not dist.is_initialized():
         dist.init_process_group(backend="nccl")
     torch.cuda.set_device(int(os.environ.get("LOCAL_RANK", 0)))
 
+
 def cleanup_distributed():
     if is_dist():
         dist.barrier()
         dist.destroy_process_group()
+
 
 def set_seed(seed: int):
     random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
 
+
 def ddp_broadcast_long_tensor(t: torch.Tensor, src: int = 0) -> torch.Tensor:
     if is_dist():
         dist.broadcast(t, src=src)
     return t
 
+
 def allreduce_sum_(x: torch.Tensor) -> torch.Tensor:
     if is_dist():
         dist.all_reduce(x, op=dist.ReduceOp.SUM)
     return x
+
 
 def world_size() -> int:
     return dist.get_world_size() if is_dist() else 1
@@ -106,6 +114,7 @@ def world_size() -> int:
 # ----------------------------
 # IO / validation
 # ----------------------------
+
 
 def read_list_of_dicts(path: str) -> List[Dict[str, Any]]:
     """
@@ -147,6 +156,7 @@ def read_list_of_dicts(path: str) -> List[Dict[str, Any]]:
         return out
     raise ValueError(f"Unsupported file type: {ext}")
 
+
 def validate_row(r: Dict[str, Any]) -> Dict[str, Any]:
     for k in ["prompt", "generation", "label"]:
         if k not in r:
@@ -155,10 +165,13 @@ def validate_row(r: Dict[str, Any]) -> Dict[str, Any]:
     gen = r["generation"]
     lab = int(r["label"])
     if not isinstance(prompt, str) or not isinstance(gen, str):
-        raise ValueError(f"prompt/generation must be str, got {type(prompt)} / {type(gen)}")
+        raise ValueError(
+            f"prompt/generation must be str, got {type(prompt)} / {type(gen)}"
+        )
     if lab not in (0, 1):
         raise ValueError(f"label must be 0 or 1, got {lab}")
     return {"prompt": prompt, "generation": gen, "label": lab}
+
 
 def masked_token_accuracy(logits: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
     """
@@ -177,10 +190,12 @@ def masked_token_accuracy(logits: torch.Tensor, labels: torch.Tensor) -> torch.T
 # Tokenization helpers (exact boundary + length mask)
 # ----------------------------
 
+
 @dataclass
 class CollateCfg:
     max_length: int
     add_eos: bool = True
+
 
 class TokenConcatHelper:
     """
@@ -189,12 +204,17 @@ class TokenConcatHelper:
       labels = input_ids but prompt positions masked to -100
       attention_mask = length-based (robust when pad_id == eos_id)
     """
+
     def __init__(self, tokenizer: AutoTokenizer, cfg: CollateCfg):
         self.tok = tokenizer
         self.cfg = cfg
 
-    def encode_concat(self, prompt: str, gen: str) -> Tuple[torch.Tensor, torch.Tensor, int]:
-        prompt_ids = self.tok(prompt, add_special_tokens=False, truncation=False)["input_ids"]
+    def encode_concat(
+        self, prompt: str, gen: str
+    ) -> Tuple[torch.Tensor, torch.Tensor, int]:
+        prompt_ids = self.tok(prompt, add_special_tokens=False, truncation=False)[
+            "input_ids"
+        ]
         gen_ids = self.tok(gen, add_special_tokens=False, truncation=False)["input_ids"]
 
         max_len = self.cfg.max_length
@@ -218,7 +238,11 @@ class TokenConcatHelper:
             labels[i] = -100
 
         length = len(full_ids)
-        return torch.tensor(full_ids, dtype=torch.long), torch.tensor(labels, dtype=torch.long), length
+        return (
+            torch.tensor(full_ids, dtype=torch.long),
+            torch.tensor(labels, dtype=torch.long),
+            length,
+        )
 
     @staticmethod
     def length_mask(lengths: List[int], max_len: int) -> torch.Tensor:
@@ -231,28 +255,35 @@ class TokenConcatHelper:
 # Datasets / collators
 # ----------------------------
 
+
 class RetainSFTDataset(Dataset):
     def __init__(self, rows: List[Dict[str, Any]]):
         self.rows = rows
+
     def __len__(self):
         return len(self.rows)
+
     def __getitem__(self, idx: int):
         r = self.rows[idx]
         return {"prompt": r["prompt"], "generation": r["generation"]}
+
 
 class ForgetIdkDPODataset(Dataset):
     def __init__(self, rows: List[Dict[str, Any]], idk_text: str):
         self.rows = rows
         self.idk_text = idk_text
+
     def __len__(self):
         return len(self.rows)
+
     def __getitem__(self, idx: int):
         r = self.rows[idx]
         return {
             "prompt": r["prompt"],
             "rejected_generation": r["generation"],
-            "chosen_generation": self.idk_text
+            "chosen_generation": self.idk_text,
         }
+
 
 class RetainSFTCollator:
     def __init__(self, tok: AutoTokenizer, cfg: CollateCfg):
@@ -263,13 +294,24 @@ class RetainSFTCollator:
         ids_list, labels_list, lens = [], [], []
         for ex in batch:
             ids, labels, ln = self.helper.encode_concat(ex["prompt"], ex["generation"])
-            ids_list.append(ids); labels_list.append(labels); lens.append(ln)
+            ids_list.append(ids)
+            labels_list.append(labels)
+            lens.append(ln)
 
         pad_id = self.tok.pad_token_id
-        input_ids = nn.utils.rnn.pad_sequence(ids_list, batch_first=True, padding_value=pad_id)
-        labels = nn.utils.rnn.pad_sequence(labels_list, batch_first=True, padding_value=-100)
+        input_ids = nn.utils.rnn.pad_sequence(
+            ids_list, batch_first=True, padding_value=pad_id
+        )
+        labels = nn.utils.rnn.pad_sequence(
+            labels_list, batch_first=True, padding_value=-100
+        )
         attention_mask = self.helper.length_mask(lens, input_ids.size(1))
-        return {"input_ids": input_ids, "attention_mask": attention_mask, "labels": labels}
+        return {
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+            "labels": labels,
+        }
+
 
 class ForgetDPOCollator:
     def __init__(self, tok: AutoTokenizer, cfg: CollateCfg):
@@ -281,19 +323,39 @@ class ForgetDPOCollator:
         r_ids_list, r_lab_list, r_lens = [], [], []
 
         for ex in batch:
-            c_ids, c_lab, c_ln = self.helper.encode_concat(ex["prompt"], ex["chosen_generation"])
-            r_ids, r_lab, r_ln = self.helper.encode_concat(ex["prompt"], ex["rejected_generation"])
-            c_ids_list.append(c_ids); c_lab_list.append(c_lab); c_lens.append(c_ln)
-            r_ids_list.append(r_ids); r_lab_list.append(r_lab); r_lens.append(r_ln)
+            c_ids, c_lab, c_ln = self.helper.encode_concat(
+                ex["prompt"], ex["chosen_generation"]
+            )
+            r_ids, r_lab, r_ln = self.helper.encode_concat(
+                ex["prompt"], ex["rejected_generation"]
+            )
+            c_ids_list.append(c_ids)
+            c_lab_list.append(c_lab)
+            c_lens.append(c_ln)
+            r_ids_list.append(r_ids)
+            r_lab_list.append(r_lab)
+            r_lens.append(r_ln)
 
         pad_id = self.tok.pad_token_id
-        chosen_input_ids = nn.utils.rnn.pad_sequence(c_ids_list, batch_first=True, padding_value=pad_id)
-        chosen_labels = nn.utils.rnn.pad_sequence(c_lab_list, batch_first=True, padding_value=-100)
-        rejected_input_ids = nn.utils.rnn.pad_sequence(r_ids_list, batch_first=True, padding_value=pad_id)
-        rejected_labels = nn.utils.rnn.pad_sequence(r_lab_list, batch_first=True, padding_value=-100)
+        chosen_input_ids = nn.utils.rnn.pad_sequence(
+            c_ids_list, batch_first=True, padding_value=pad_id
+        )
+        chosen_labels = nn.utils.rnn.pad_sequence(
+            c_lab_list, batch_first=True, padding_value=-100
+        )
+        rejected_input_ids = nn.utils.rnn.pad_sequence(
+            r_ids_list, batch_first=True, padding_value=pad_id
+        )
+        rejected_labels = nn.utils.rnn.pad_sequence(
+            r_lab_list, batch_first=True, padding_value=-100
+        )
 
-        chosen_attention_mask = self.helper.length_mask(c_lens, chosen_input_ids.size(1))
-        rejected_attention_mask = self.helper.length_mask(r_lens, rejected_input_ids.size(1))
+        chosen_attention_mask = self.helper.length_mask(
+            c_lens, chosen_input_ids.size(1)
+        )
+        rejected_attention_mask = self.helper.length_mask(
+            r_lens, rejected_input_ids.size(1)
+        )
 
         return {
             "chosen_input_ids": chosen_input_ids,
@@ -309,7 +371,10 @@ class ForgetDPOCollator:
 # DPO objective helpers
 # ----------------------------
 
-def sequence_logp_mean_from_labels(logits: torch.Tensor, labels: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+
+def sequence_logp_mean_from_labels(
+    logits: torch.Tensor, labels: torch.Tensor
+) -> Tuple[torch.Tensor, torch.Tensor]:
     """
     Mean log-prob over positions where labels != -100.
     logits: [B, T, V], labels: [B, T]
@@ -330,6 +395,7 @@ def sequence_logp_mean_from_labels(logits: torch.Tensor, labels: torch.Tensor) -
     mean_logp = token_logp.sum(dim=-1) / token_count
     return mean_logp, token_count
 
+
 def dpo_loss(
     pi_logp_chosen: torch.Tensor,
     pi_logp_rejected: torch.Tensor,
@@ -341,7 +407,9 @@ def dpo_loss(
     logits = beta * [ (pi - ref)_chosen - (pi - ref)_rejected ]
     loss = -log(sigmoid(logits))
     """
-    logits = beta * ((pi_logp_chosen - ref_logp_chosen) - (pi_logp_rejected - ref_logp_rejected))
+    logits = beta * (
+        (pi_logp_chosen - ref_logp_chosen) - (pi_logp_rejected - ref_logp_rejected)
+    )
     loss = -torch.nn.functional.logsigmoid(logits).mean()
     pref_acc = (logits > 0).float().mean()
     return loss, pref_acc
@@ -351,9 +419,15 @@ def dpo_loss(
 # FSDP wrapping + checkpoint IO
 # ----------------------------
 
-def wrap_fsdp(model: nn.Module, mp: Optional[MixedPrecision], cpu_offload: bool) -> nn.Module:
+
+def wrap_fsdp(
+    model: nn.Module, mp: Optional[MixedPrecision], cpu_offload: bool
+) -> nn.Module:
     import functools
-    auto_wrap_policy = functools.partial(transformer_auto_wrap_policy, transformer_layer_cls={GPT2Block})
+
+    auto_wrap_policy = functools.partial(
+        transformer_auto_wrap_policy, transformer_layer_cls={GPT2Block}
+    )
     return FSDP(
         model,
         auto_wrap_policy=auto_wrap_policy,
@@ -365,7 +439,10 @@ def wrap_fsdp(model: nn.Module, mp: Optional[MixedPrecision], cpu_offload: bool)
         use_orig_params=True,
     )
 
-def load_base_then_finetuned(base_model: str, ckpt_dir: str, dtype: torch.dtype, ft_filename: str) -> nn.Module:
+
+def load_base_then_finetuned(
+    base_model: str, ckpt_dir: str, dtype: torch.dtype, ft_filename: str
+) -> nn.Module:
     model = AutoModelForCausalLM.from_pretrained(base_model, torch_dtype=dtype)
     ft_path = os.path.join(ckpt_dir, ft_filename)
     if not os.path.exists(ft_path):
@@ -380,6 +457,7 @@ def load_base_then_finetuned(base_model: str, ckpt_dir: str, dtype: torch.dtype,
             print(f"[load] unexpected keys (first 20): {unexpected[:20]}")
     return model
 
+
 def maybe_resume_opt_sched(ckpt_dir: str, optimizer, scheduler, resume_optimizer: bool):
     if not resume_optimizer:
         return
@@ -393,6 +471,7 @@ def maybe_resume_opt_sched(ckpt_dir: str, optimizer, scheduler, resume_optimizer
         scheduler.load_state_dict(torch.load(sch_path, map_location="cpu"))
         if is_main():
             print(f"[resume] loaded scheduler state from {sch_path}")
+
 
 def save_full_model_fsdp(model: FSDP, out_dir: str, filename: str):
     os.makedirs(out_dir, exist_ok=True)
@@ -409,9 +488,11 @@ def save_full_model_fsdp(model: FSDP, out_dir: str, filename: str):
 # PCGrad (2 objectives here, implemented generally)
 # ----------------------------
 
+
 def zero_param_grads(params: List[torch.nn.Parameter]):
     for p in params:
         p.grad = None
+
 
 def snapshot_param_grads(params: List[torch.nn.Parameter]) -> List[torch.Tensor]:
     """
@@ -426,7 +507,10 @@ def snapshot_param_grads(params: List[torch.nn.Parameter]) -> List[torch.Tensor]
             out.append(p.grad.detach().clone())
     return out
 
-def global_dot(grads_a: List[torch.Tensor], grads_b: List[torch.Tensor]) -> torch.Tensor:
+
+def global_dot(
+    grads_a: List[torch.Tensor], grads_b: List[torch.Tensor]
+) -> torch.Tensor:
     """
     Dot product across *full* parameter space computed via sum over local shards + allreduce.
     Returns scalar tensor on current CUDA device.
@@ -440,6 +524,7 @@ def global_dot(grads_a: List[torch.Tensor], grads_b: List[torch.Tensor]) -> torc
     allreduce_sum_(s)
     return s
 
+
 def global_norm2(grads: List[torch.Tensor]) -> torch.Tensor:
     dev = grads[0].device if len(grads) > 0 else torch.device("cuda")
     s = torch.zeros((), device=dev, dtype=torch.float32)
@@ -450,6 +535,7 @@ def global_norm2(grads: List[torch.Tensor]) -> torch.Tensor:
     allreduce_sum_(s)
     return s
 
+
 def synced_task_perm(num_tasks: int, seed: int, device: torch.device) -> List[int]:
     if num_tasks <= 1:
         return list(range(num_tasks))
@@ -457,7 +543,9 @@ def synced_task_perm(num_tasks: int, seed: int, device: torch.device) -> List[in
         if dist.get_rank() == 0:
             gen = torch.Generator(device=device)
             gen.manual_seed(seed)
-            perm = torch.randperm(num_tasks, generator=gen, device=device, dtype=torch.long)
+            perm = torch.randperm(
+                num_tasks, generator=gen, device=device, dtype=torch.long
+            )
         else:
             perm = torch.empty(num_tasks, device=device, dtype=torch.long)
         ddp_broadcast_long_tensor(perm, src=0)
@@ -466,6 +554,7 @@ def synced_task_perm(num_tasks: int, seed: int, device: torch.device) -> List[in
     gen = torch.Generator(device=device)
     gen.manual_seed(seed)
     return torch.randperm(num_tasks, generator=gen, device=device).tolist()
+
 
 def pcgrad_project(
     grads_by_task: List[List[torch.Tensor]],
@@ -492,8 +581,12 @@ def pcgrad_project(
 
     # optional stats for 2-task case
     dot01 = float(global_dot(orig[0], orig[1]).item()) if num_tasks == 2 else 0.0
-    n0 = float(torch.sqrt(global_norm2(orig[0]) + 0.0).item()) if num_tasks >= 1 else 0.0
-    n1 = float(torch.sqrt(global_norm2(orig[1]) + 0.0).item()) if num_tasks == 2 else 0.0
+    n0 = (
+        float(torch.sqrt(global_norm2(orig[0]) + 0.0).item()) if num_tasks >= 1 else 0.0
+    )
+    n1 = (
+        float(torch.sqrt(global_norm2(orig[1]) + 0.0).item()) if num_tasks == 2 else 0.0
+    )
 
     for i in perm:
         # iterate other tasks in a (synced) random order
@@ -528,6 +621,7 @@ def pcgrad_project(
 # Args / main
 # ----------------------------
 
+
 def parse_args():
     p = argparse.ArgumentParser()
 
@@ -538,18 +632,31 @@ def parse_args():
     p.add_argument("--output_dir", type=str, required=True)
 
     p.add_argument("--max_length", type=int, default=1024)
-    p.add_argument("--batch_size_retain", type=int, default=2, help="Per-GPU retain SFT batch size")
-    p.add_argument("--batch_size_forget", type=int, default=2, help="Per-GPU forget DPO batch size")
+    p.add_argument(
+        "--batch_size_retain", type=int, default=2, help="Per-GPU retain SFT batch size"
+    )
+    p.add_argument(
+        "--batch_size_forget", type=int, default=2, help="Per-GPU forget DPO batch size"
+    )
     p.add_argument("--grad_accum", type=int, default=8)
     p.add_argument("--epochs", type=int, default=1)
     p.add_argument("--lr", type=float, default=2e-5)
     p.add_argument("--weight_decay", type=float, default=0.0)
     p.add_argument("--warmup_steps", type=int, default=50)
-    p.add_argument("--max_steps", type=int, default=-1, help="If >0, stop after this many optimizer steps")
+    p.add_argument(
+        "--max_steps",
+        type=int,
+        default=-1,
+        help="If >0, stop after this many optimizer steps",
+    )
 
     # IdkDPO specifics
-    p.add_argument("--idk_text", type=str, default=" I don't know.",
-                   help="Chosen response for label=1 prompts. Leading space is intentional for GPT-2 BPE.")
+    p.add_argument(
+        "--idk_text",
+        type=str,
+        default=" I don't know.",
+        help="Chosen response for label=1 prompts. Leading space is intentional for GPT-2 BPE.",
+    )
     p.add_argument("--beta", type=float, default=0.1)
     p.add_argument("--dpo_coef", type=float, default=1.0)
     p.add_argument("--retain_coef", type=float, default=1.0)
@@ -576,6 +683,7 @@ def parse_args():
     p.add_argument("--resume_optimizer", action="store_true")
 
     return p.parse_args()
+
 
 def main():
     args = parse_args()
@@ -604,7 +712,9 @@ def main():
     retain_rows = [r for r in rows if r["label"] == 0]
 
     if is_main():
-        print(f"[data] total={len(rows)} forget(label=1)={len(forget_rows)} retain(label=0)={len(retain_rows)}")
+        print(
+            f"[data] total={len(rows)} forget(label=1)={len(forget_rows)} retain(label=0)={len(retain_rows)}"
+        )
 
     if len(forget_rows) == 0:
         raise ValueError("No label=1 (forget/toxic) rows found.")
@@ -642,23 +752,37 @@ def main():
     )
 
     # models (pi + frozen reference)
-    pi_model = load_base_then_finetuned(args.base_model, args.ckpt_dir, dtype=dtype, ft_filename=args.ft_filename)
-    ref_model = load_base_then_finetuned(args.base_model, args.ckpt_dir, dtype=dtype, ft_filename=args.ft_filename)
+    pi_model = load_base_then_finetuned(
+        args.base_model, args.ckpt_dir, dtype=dtype, ft_filename=args.ft_filename
+    )
+    ref_model = load_base_then_finetuned(
+        args.base_model, args.ckpt_dir, dtype=dtype, ft_filename=args.ft_filename
+    )
     for p_ in ref_model.parameters():
         p_.requires_grad_(False)
 
     # FSDP MP config
     mp = None
     if args.fp16:
-        mp = MixedPrecision(param_dtype=torch.float16, reduce_dtype=torch.float16, buffer_dtype=torch.float16)
+        mp = MixedPrecision(
+            param_dtype=torch.float16,
+            reduce_dtype=torch.float16,
+            buffer_dtype=torch.float16,
+        )
     elif args.bf16:
-        mp = MixedPrecision(param_dtype=torch.bfloat16, reduce_dtype=torch.bfloat16, buffer_dtype=torch.bfloat16)
+        mp = MixedPrecision(
+            param_dtype=torch.bfloat16,
+            reduce_dtype=torch.bfloat16,
+            buffer_dtype=torch.bfloat16,
+        )
 
     model = wrap_fsdp(pi_model, mp=mp, cpu_offload=args.cpu_offload)
     ref_model = wrap_fsdp(ref_model, mp=mp, cpu_offload=args.cpu_offload)
     ref_model.eval()
 
-    optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+    optimizer = torch.optim.AdamW(
+        model.parameters(), lr=args.lr, weight_decay=args.weight_decay
+    )
 
     # steps
     # each microstep consumes one batch from each loader (cycling smaller one)
@@ -669,7 +793,9 @@ def main():
         total_steps = min(total_steps, args.max_steps)
 
     scheduler = get_cosine_schedule_with_warmup(
-        optimizer, num_warmup_steps=args.warmup_steps, num_training_steps=max(total_steps, 1)
+        optimizer,
+        num_warmup_steps=args.warmup_steps,
+        num_training_steps=max(total_steps, 1),
     )
     maybe_resume_opt_sched(args.ckpt_dir, optimizer, scheduler, args.resume_optimizer)
 
@@ -699,7 +825,9 @@ def main():
     accum_grads = [torch.zeros_like(p, device=p.device) for p in trainable_params]
 
     model.train()
-    pbar = tqdm(total=total_steps, disable=not is_main(), desc="PCGrad IdkDPO/FSDP opt steps")
+    pbar = tqdm(
+        total=total_steps, disable=not is_main(), desc="PCGrad IdkDPO/FSDP opt steps"
+    )
     start_time = time.time()
 
     forget_it = iter(forget_loader)
@@ -735,7 +863,7 @@ def main():
                 r_batch[k] = r_batch[k].cuda(non_blocking=True)
 
             micro_in_accum = (micro % args.grad_accum) + 1
-            do_step = (micro_in_accum == args.grad_accum)
+            do_step = micro_in_accum == args.grad_accum
 
             # --------------------
             # 1) grads for retain objective
@@ -749,7 +877,9 @@ def main():
                     use_cache=False,
                 )
                 retain_loss = out_ret.loss
-                retain_tok_acc = masked_token_accuracy(out_ret.logits[:, :-1, :], r_batch["labels"][:, 1:])
+                retain_tok_acc = masked_token_accuracy(
+                    out_ret.logits[:, :-1, :], r_batch["labels"][:, 1:]
+                )
 
                 retain_obj = args.retain_coef * retain_loss
                 retain_obj = retain_obj / max(1, args.grad_accum)
@@ -779,11 +909,19 @@ def main():
                     use_cache=False,
                 )
 
-                pi_logp_c, c_tokcnt = sequence_logp_mean_from_labels(out_c.logits, f_batch["chosen_labels"])
-                pi_logp_rj, rj_tokcnt = sequence_logp_mean_from_labels(out_rj.logits, f_batch["rejected_labels"])
+                pi_logp_c, c_tokcnt = sequence_logp_mean_from_labels(
+                    out_c.logits, f_batch["chosen_labels"]
+                )
+                pi_logp_rj, rj_tokcnt = sequence_logp_mean_from_labels(
+                    out_rj.logits, f_batch["rejected_labels"]
+                )
 
-                tok_acc_c = masked_token_accuracy(out_c.logits[:, :-1, :], f_batch["chosen_labels"][:, 1:])
-                tok_acc_rj = masked_token_accuracy(out_rj.logits[:, :-1, :], f_batch["rejected_labels"][:, 1:])
+                tok_acc_c = masked_token_accuracy(
+                    out_c.logits[:, :-1, :], f_batch["chosen_labels"][:, 1:]
+                )
+                tok_acc_rj = masked_token_accuracy(
+                    out_rj.logits[:, :-1, :], f_batch["rejected_labels"][:, 1:]
+                )
 
                 with torch.no_grad():
                     ref_out_c = ref_model(
@@ -798,8 +936,12 @@ def main():
                         labels=f_batch["rejected_labels"],
                         use_cache=False,
                     )
-                    ref_logp_c, _ = sequence_logp_mean_from_labels(ref_out_c.logits, f_batch["chosen_labels"])
-                    ref_logp_rj, _ = sequence_logp_mean_from_labels(ref_out_rj.logits, f_batch["rejected_labels"])
+                    ref_logp_c, _ = sequence_logp_mean_from_labels(
+                        ref_out_c.logits, f_batch["chosen_labels"]
+                    )
+                    ref_logp_rj, _ = sequence_logp_mean_from_labels(
+                        ref_out_rj.logits, f_batch["rejected_labels"]
+                    )
 
                 dpo, pref_acc = dpo_loss(
                     pi_logp_chosen=pi_logp_c,
@@ -809,7 +951,11 @@ def main():
                     beta=args.beta,
                 )
 
-                idk_lm_loss = out_c.loss if out_c.loss is not None else torch.tensor(0.0, device=dpo.device)
+                idk_lm_loss = (
+                    out_c.loss
+                    if out_c.loss is not None
+                    else torch.tensor(0.0, device=dpo.device)
+                )
                 forget_obj = (args.dpo_coef * dpo) + (args.idk_lm_coef * idk_lm_loss)
                 forget_obj = forget_obj / max(1, args.grad_accum)
 
@@ -853,7 +999,9 @@ def main():
                     try:
                         _ = FSDP.clip_grad_norm_(model.parameters(), args.grad_clip)
                     except Exception:
-                        torch.nn.utils.clip_grad_norm_(model.parameters(), args.grad_clip)
+                        torch.nn.utils.clip_grad_norm_(
+                            model.parameters(), args.grad_clip
+                        )
 
                 if args.fp16:
                     scaler.step(optimizer)
@@ -872,35 +1020,54 @@ def main():
                 pbar.update(1)
 
                 if is_main() and (opt_step % args.log_every == 0):
-                    wandb.log({
-                        "loss_retain_sft": float(retain_loss.item()),
-                        "loss_dpo_forget": float(dpo.item()),
-                        "loss_idk_lm": float(idk_lm_loss.item()),
-                        "pref_accuracy": float(pref_acc.item()),
-                        "tok_acc_retain": float(retain_tok_acc.item()),
-                        "tok_acc_idk_chosen": float(tok_acc_c.item()),
-                        "tok_acc_forget_rejected": float(tok_acc_rj.item()),
-                        "pi_logp_idk_mean": float(pi_logp_c.mean().item()),
-                        "pi_logp_rejected_mean": float(pi_logp_rj.mean().item()),
-                        "ref_logp_idk_mean": float(ref_logp_c.mean().item()),
-                        "ref_logp_rejected_mean": float(ref_logp_rj.mean().item()),
-                        "idk_sup_tokens_mean": float(c_tokcnt.mean().item()),
-                        "rej_sup_tokens_mean": float(rj_tokcnt.mean().item()),
-                        "pcgrad_conflicts": pc_stats.get("pcgrad_conflicts", 0.0),
-                        "pcgrad_dot_retain_forget": pc_stats.get("pcgrad_dot_retain_forget", 0.0),
-                        "pcgrad_norm_retain": pc_stats.get("pcgrad_norm_retain", 0.0),
-                        "pcgrad_norm_forget": pc_stats.get("pcgrad_norm_forget", 0.0),
-                        "lr": float(scheduler.get_last_lr()[0]),
-                        "opt_step": opt_step,
-                        "epoch": epoch,
-                        "elapsed_sec": time.time() - start_time,
-                    }, step=opt_step)
+                    wandb.log(
+                        {
+                            "loss_retain_sft": float(retain_loss.item()),
+                            "loss_dpo_forget": float(dpo.item()),
+                            "loss_idk_lm": float(idk_lm_loss.item()),
+                            "pref_accuracy": float(pref_acc.item()),
+                            "tok_acc_retain": float(retain_tok_acc.item()),
+                            "tok_acc_idk_chosen": float(tok_acc_c.item()),
+                            "tok_acc_forget_rejected": float(tok_acc_rj.item()),
+                            "pi_logp_idk_mean": float(pi_logp_c.mean().item()),
+                            "pi_logp_rejected_mean": float(pi_logp_rj.mean().item()),
+                            "ref_logp_idk_mean": float(ref_logp_c.mean().item()),
+                            "ref_logp_rejected_mean": float(ref_logp_rj.mean().item()),
+                            "idk_sup_tokens_mean": float(c_tokcnt.mean().item()),
+                            "rej_sup_tokens_mean": float(rj_tokcnt.mean().item()),
+                            "pcgrad_conflicts": pc_stats.get("pcgrad_conflicts", 0.0),
+                            "pcgrad_dot_retain_forget": pc_stats.get(
+                                "pcgrad_dot_retain_forget", 0.0
+                            ),
+                            "pcgrad_norm_retain": pc_stats.get(
+                                "pcgrad_norm_retain", 0.0
+                            ),
+                            "pcgrad_norm_forget": pc_stats.get(
+                                "pcgrad_norm_forget", 0.0
+                            ),
+                            "lr": float(scheduler.get_last_lr()[0]),
+                            "opt_step": opt_step,
+                            "epoch": epoch,
+                            "elapsed_sec": time.time() - start_time,
+                        },
+                        step=opt_step,
+                    )
 
-                if (opt_step % args.save_every == 0):
-                    save_full_model_fsdp(model, args.output_dir, filename=f"pytorch_model_step{opt_step:06d}.bin")
+                if opt_step % args.save_every == 0:
+                    save_full_model_fsdp(
+                        model,
+                        args.output_dir,
+                        filename=f"pytorch_model_step{opt_step:06d}.bin",
+                    )
                     if is_main():
-                        torch.save(optimizer.state_dict(), os.path.join(args.output_dir, "optimizer.pt"))
-                        torch.save(scheduler.state_dict(), os.path.join(args.output_dir, "scheduler.pt"))
+                        torch.save(
+                            optimizer.state_dict(),
+                            os.path.join(args.output_dir, "optimizer.pt"),
+                        )
+                        torch.save(
+                            scheduler.state_dict(),
+                            os.path.join(args.output_dir, "scheduler.pt"),
+                        )
 
                 if args.max_steps > 0 and opt_step >= args.max_steps:
                     break
@@ -913,11 +1080,16 @@ def main():
     # final save
     save_full_model_fsdp(model, args.output_dir, filename="pytorch_model.bin")
     if is_main():
-        torch.save(optimizer.state_dict(), os.path.join(args.output_dir, "optimizer.pt"))
-        torch.save(scheduler.state_dict(), os.path.join(args.output_dir, "scheduler.pt"))
+        torch.save(
+            optimizer.state_dict(), os.path.join(args.output_dir, "optimizer.pt")
+        )
+        torch.save(
+            scheduler.state_dict(), os.path.join(args.output_dir, "scheduler.pt")
+        )
         wandb.finish()
 
     cleanup_distributed()
+
 
 if __name__ == "__main__":
     main()

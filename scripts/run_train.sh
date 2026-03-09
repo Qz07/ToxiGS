@@ -1,3 +1,4 @@
+cd ../train
 torchrun --nproc_per_node=2 gpt2-train.py \
   --data_path ./data/jan26_filter_lt_256_248k.pickle \
   --output_dir ./ckpts/train_lt_256 \

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # --------- user config ----------
-CKPT="./ckpts/ga_train_lt_256_epoch5/step_00002453_hf"          # <-- change this
+CKPT="CKPT_PATH_HERE"          # <-- change this
 OUT_DIR="./results"
 OUT_JSON="${OUT_DIR}/mmlu_gpt2.json"
 LOG_FILE="${OUT_DIR}/mmlu_gpt2.log"
@@ -18,6 +18,7 @@ LIMIT=""   # e.g., "50" or "0.1" ; leave empty for full eval
 # --------------------------------
 
 mkdir -p "${OUT_DIR}"
+cd ../eval
 
 CMD=(python -u run_mmlu.py
   --ckpt "${CKPT}"
