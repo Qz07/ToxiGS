@@ -25,12 +25,6 @@
         gradient surgery (PCGrad) to simultaneously suppress toxicity and
         preserve language modeling ability.
       </p>
-      <div class="hero-actions">
-        <button on:click={() => scrollToSection("overview")}>Read overview</button>
-        <button class="secondary" on:click={() => scrollToSection("method")}>
-          Explore method
-        </button>
-      </div>
       <div class="hero-meta">
         <span>Model: GPT-2</span>
         <span>Unlearning: GradDiff &amp; idkDPO</span>
@@ -302,21 +296,21 @@
     margin: 0;
     font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text",
       sans-serif;
-    color: #0f172a;
-    background: radial-gradient(circle at top left, #0f172a, #020617);
+    color: #111827;
+    background: #f3f4f6;
   }
 
   main {
     min-height: 100vh;
-    background: radial-gradient(circle at 0 0, #1e293b 0, #020617 55%);
-    color: white;
+    background: #f3f4f6;
+    color: #111827;
   }
 
   .hero {
     padding: 4rem 1.5rem 3rem;
     display: flex;
     justify-content: center;
-    background: radial-gradient(circle at top, #22d3ee33, #0f172a 60%);
+    background: linear-gradient(to bottom, #ffffff, #e5e7eb);
   }
 
   .hero-content {
@@ -332,14 +326,14 @@
   h2 {
     font-size: clamp(1.4rem, 2.4vw, 1.9rem);
     margin-top: 0.25rem;
-    color: #e5e7eb;
+    color: #374151;
     font-weight: 500;
   }
 
   .hero-tagline {
     margin-top: 1rem;
     max-width: 44rem;
-    color: #cbd5f5;
+    color: #4b5563;
     line-height: 1.6;
   }
 
@@ -387,14 +381,14 @@
     flex-wrap: wrap;
     gap: 0.5rem;
     font-size: 0.8rem;
-    color: #a5b4fc;
+    color: #4b5563;
   }
 
   .hero-meta span {
     padding: 0.25rem 0.7rem;
     border-radius: 999px;
-    background: rgba(15, 23, 42, 0.8);
-    border: 1px solid rgba(56, 189, 248, 0.4);
+    background: #e5e7eb;
+    border: 1px solid #d1d5db;
   }
 
   .hero-authors {
@@ -403,7 +397,7 @@
     flex-direction: column;
     gap: 0.15rem;
     font-size: 0.85rem;
-    color: #cbd5f5;
+    color: #4b5563;
   }
 
   .top-nav {
@@ -414,24 +408,24 @@
     justify-content: center;
     gap: 0.5rem;
     padding: 0.75rem 1.5rem;
-    background: rgba(15, 23, 42, 0.9);
+    background: rgba(255, 255, 255, 0.9);
     backdrop-filter: blur(14px);
-    border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+    border-bottom: 1px solid rgba(209, 213, 219, 0.9);
     overflow-x: auto;
   }
 
   .top-nav button {
     background: transparent;
     border-radius: 999px;
-    border-color: rgba(148, 163, 184, 0.7);
-    color: #e5e7eb;
+    border-color: rgba(156, 163, 175, 0.8);
+    color: #111827;
     box-shadow: none;
     white-space: nowrap;
   }
 
   .top-nav button:hover {
-    background: rgba(15, 23, 42, 0.9);
-    border-color: #38bdf8;
+    background: #e5e7eb;
+    border-color: #111827;
   }
 
   .section {
@@ -441,17 +435,17 @@
   }
 
   .section h2 {
-    color: #f9fafb;
+    color: #111827;
   }
 
   .section h3 {
     margin-top: 1.5rem;
-    color: #e5e7eb;
+    color: #111827;
   }
 
   .section p,
   .section li {
-    color: #cbd5f5;
+    color: #374151;
     line-height: 1.7;
   }
 
@@ -478,9 +472,9 @@
   .card {
     padding: 1.4rem 1.3rem;
     border-radius: 1rem;
-    background: radial-gradient(circle at top left, #1e293b, #020617);
-    border: 1px solid rgba(148, 163, 184, 0.35);
-    box-shadow: 0 18px 40px rgba(15, 23, 42, 0.85);
+    background: #ffffff;
+    border: 1px solid rgba(209, 213, 219, 0.9);
+    box-shadow: 0 10px 25px rgba(15, 23, 42, 0.1);
   }
 
   .card h3 {
@@ -508,14 +502,14 @@
     width: 100%;
     display: block;
     border-radius: 0.9rem;
-    border: 1px solid rgba(148, 163, 184, 0.4);
-    box-shadow: 0 18px 40px rgba(15, 23, 42, 0.85);
+    border: 1px solid rgba(209, 213, 219, 0.9);
+    box-shadow: 0 10px 25px rgba(15, 23, 42, 0.12);
   }
 
   .result-images figcaption {
     margin-top: 0.6rem;
     font-size: 0.85rem;
-    color: #cbd5f5;
+    color: #4b5563;
   }
 
   code {
@@ -524,16 +518,16 @@
     font-size: 0.85em;
     padding: 0.08rem 0.35rem;
     border-radius: 0.4rem;
-    background: rgba(15, 23, 42, 0.9);
-    border: 1px solid rgba(148, 163, 184, 0.4);
+    background: #e5e7eb;
+    border: 1px solid #d1d5db;
   }
 
   .footer {
     padding: 1.75rem 1.5rem 2.5rem;
     text-align: center;
-    color: #9ca3af;
-    border-top: 1px solid rgba(148, 163, 184, 0.24);
-    background: radial-gradient(circle at bottom, #020617, #020617 55%);
+    color: #4b5563;
+    border-top: 1px solid #d1d5db;
+    background: #e5e7eb;
   }
 
   .footer p {
