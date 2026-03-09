@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-FSDP Gradient Ascent Unlearning for GPT-2 (NTP, loss only on generation tokens)
+FSDP Gradient difference Unlearning for GPT-2 (NTP, loss only on generation tokens)
 
 Dataset:
 - Pickle file containing either:
@@ -8,7 +8,7 @@ Dataset:
   (B) dict[str, dict] with same inner keys (we'll use values()).
 
 Unlearning:
-- forget set: label == 1  -> gradient ASCENT (maximize loss on generation tokens)
+- forget set: label == 1  -> gradient difference (maximize loss on generation tokens)
 - retain set: label == 0  -> (optional) normal gradient DESCENT to preserve utility
   By default retain_weight=0 => simplest "GradDiff only on forget set".
 
@@ -616,7 +616,7 @@ def main():
             out_f = model(**batch_forget)
             forget_loss = out_f.loss
 
-            # Gradient ascent => maximize forget_loss => minimize (-forget_loss)
+            # Gradient difference => maximize forget_loss => minimize (-forget_loss)
             total_loss = -args.forget_weight * forget_loss
 
             retain_loss = None

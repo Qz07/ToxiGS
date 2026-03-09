@@ -6,7 +6,7 @@ Dataset (pickle):
 - list[dict] with keys {"prompt","generation","label"} OR dict[str, dict] values()
 
 Objectives (both are *minimized*):
-- forget set (label==1): J_f = - forget_weight * L_forget   (=> gradient ASCENT on L_forget)
+- forget set (label==1): J_f = - forget_weight * L_forget   (=> gradient difference on L_forget)
 - retain set (label==0): J_r = + retain_weight * L_retain   (=> gradient DESCENT on L_retain)
 
 PCGrad (2-task case):
@@ -23,6 +23,7 @@ Run:
 
 from __future__ import annotations
 import os
+
 os.environ["TRANSFORMERS_NO_TORCHVISION"] = "1"
 
 import argparse
@@ -64,8 +65,11 @@ from torch.distributed.fsdp.wrap import transformer_auto_wrap_policy
 # Utilities
 # ----------------------------
 
+
 def is_rank0() -> bool:
-    return (not dist.is_available()) or (not dist.is_initialized()) or dist.get_rank() == 0
+    return (
+        (not dist.is_available()) or (not dist.is_initialized()) or dist.get_rank() == 0
+    )
 
 
 def setup_distributed() -> Tuple[int, int, int]:
@@ -134,6 +138,7 @@ def maybe_load_meta(ckpt_dir: Union[str, Path]) -> Dict[str, Any]:
 # Dataset
 # ----------------------------
 
+
 @dataclass
 class Example:
     prompt: str
@@ -151,7 +156,9 @@ class PicklePromptGenDataset(Dataset):
         elif isinstance(obj, list):
             items = obj
         else:
-            raise ValueError(f"Unsupported pickle type: {type(obj)} (expect list or dict)")
+            raise ValueError(
+                f"Unsupported pickle type: {type(obj)} (expect list or dict)"
+            )
 
         filtered: List[Example] = []
         for d in items:
@@ -162,11 +169,17 @@ class PicklePromptGenDataset(Dataset):
             if int(d["label"]) != int(target_label):
                 continue
             filtered.append(
-                Example(prompt=str(d["prompt"]), generation=str(d["generation"]), label=int(d["label"]))
+                Example(
+                    prompt=str(d["prompt"]),
+                    generation=str(d["generation"]),
+                    label=int(d["label"]),
+                )
             )
 
         if len(filtered) == 0:
-            raise ValueError(f"No examples found with label={target_label} in {data_path}")
+            raise ValueError(
+                f"No examples found with label={target_label} in {data_path}"
+            )
 
         self.data = filtered
 
@@ -184,7 +197,9 @@ def build_prompt_gen_features(
     add_eos: bool = True,
 ) -> Dict[str, torch.Tensor]:
     prompt_ids = tokenizer.encode(ex.prompt, add_special_tokens=False)
-    gen_text = ex.generation + (tokenizer.eos_token if (add_eos and tokenizer.eos_token is not None) else "")
+    gen_text = ex.generation + (
+        tokenizer.eos_token if (add_eos and tokenizer.eos_token is not None) else ""
+    )
     gen_ids = tokenizer.encode(gen_text, add_special_tokens=False)
 
     if len(gen_ids) > seq_len:
@@ -222,7 +237,9 @@ class Collator:
         self.seq_len = seq_len
 
     def __call__(self, batch: List[Example]) -> Dict[str, torch.Tensor]:
-        feats = [build_prompt_gen_features(ex, self.tokenizer, self.seq_len) for ex in batch]
+        feats = [
+            build_prompt_gen_features(ex, self.tokenizer, self.seq_len) for ex in batch
+        ]
         return {
             "input_ids": torch.stack([f["input_ids"] for f in feats], dim=0),
             "attention_mask": torch.stack([f["attention_mask"] for f in feats], dim=0),
@@ -233,6 +250,7 @@ class Collator:
 # ----------------------------
 # Model / FSDP
 # ----------------------------
+
 
 def load_model_and_tokenizer(
     model_name_or_path: str,
@@ -281,6 +299,7 @@ def wrap_fsdp(model: torch.nn.Module, bf16: bool = True) -> torch.nn.Module:
     block_cls = set()
     try:
         from transformers.models.gpt2.modeling_gpt2 import GPT2Block
+
         block_cls = {GPT2Block}
     except Exception:
         block_cls = set()
@@ -293,7 +312,9 @@ def wrap_fsdp(model: torch.nn.Module, bf16: bool = True) -> torch.nn.Module:
 
     auto_wrap_policy = None
     if block_cls:
-        auto_wrap_policy = partial(transformer_auto_wrap_policy, transformer_layer_cls=block_cls)
+        auto_wrap_policy = partial(
+            transformer_auto_wrap_policy, transformer_layer_cls=block_cls
+        )
 
     return FSDP(
         model,
@@ -307,6 +328,7 @@ def wrap_fsdp(model: torch.nn.Module, bf16: bool = True) -> torch.nn.Module:
 # ----------------------------
 # Checkpoint save/load
 # ----------------------------
+
 
 def save_checkpoint(
     model: FSDP,
@@ -370,6 +392,7 @@ def try_resume_optimizer_scheduler(
 # PCGrad helpers (2 objectives)
 # ----------------------------
 
+
 def _collect_grads(params: List[torch.nn.Parameter]) -> List[Optional[torch.Tensor]]:
     grads: List[Optional[torch.Tensor]] = []
     for p in params:
@@ -380,7 +403,9 @@ def _collect_grads(params: List[torch.nn.Parameter]) -> List[Optional[torch.Tens
     return grads
 
 
-def _global_dot(g1: List[Optional[torch.Tensor]], g2: List[Optional[torch.Tensor]]) -> torch.Tensor:
+def _global_dot(
+    g1: List[Optional[torch.Tensor]], g2: List[Optional[torch.Tensor]]
+) -> torch.Tensor:
     device = torch.cuda.current_device()
     acc = torch.zeros((), device=device, dtype=torch.float32)
     for a, b in zip(g1, g2):
@@ -493,6 +518,7 @@ def _accumulate_into_param_grads(
 # Main train
 # ----------------------------
 
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--data_path", type=str, required=True)
@@ -501,7 +527,7 @@ def main():
     ap.add_argument("--output_dir", type=str, required=True)
 
     ap.add_argument("--seq_len", type=int, default=512)
-    ap.add_argument("--batch_size", type=int, default=2)     # per-GPU
+    ap.add_argument("--batch_size", type=int, default=2)  # per-GPU
     ap.add_argument("--grad_accum", type=int, default=8)
     ap.add_argument("--epochs", type=int, default=1)
 
@@ -512,7 +538,9 @@ def main():
     ap.add_argument("--forget_weight", type=float, default=1.0)
     ap.add_argument("--retain_weight", type=float, default=0.0)
 
-    ap.add_argument("--scheduler", type=str, default="cosine", choices=["cosine", "linear", "none"])
+    ap.add_argument(
+        "--scheduler", type=str, default="cosine", choices=["cosine", "linear", "none"]
+    )
     ap.add_argument("--warmup_steps", type=int, default=100)
     ap.add_argument("--resume_optimizer", action="store_true")
 
@@ -523,7 +551,11 @@ def main():
     ap.add_argument("--run_name", type=str, default=None)
 
     ap.add_argument("--seed", type=int, default=42)
-    ap.add_argument("--bf16", action="store_true", help="Use bf16 mixed precision (recommended on A5000)")
+    ap.add_argument(
+        "--bf16",
+        action="store_true",
+        help="Use bf16 mixed precision (recommended on A5000)",
+    )
     ap.set_defaults(bf16=True)
 
     ap.add_argument("--pcgrad_eps", type=float, default=1e-12)
@@ -538,8 +570,11 @@ def main():
     if is_rank0():
         try:
             import wandb as _wandb
+
             wandb = _wandb
-            wandb.init(project=args.wandb_project, name=args.run_name, config=vars(args))
+            wandb.init(
+                project=args.wandb_project, name=args.run_name, config=vars(args)
+            )
         except Exception as e:
             print(f"[wandb] disabled (import/init failed): {e}")
             wandb = None
@@ -557,11 +592,17 @@ def main():
 
     # Build datasets / loaders
     forget_ds = PicklePromptGenDataset(args.data_path, target_label=1)
-    retain_ds = PicklePromptGenDataset(args.data_path, target_label=0) if args.retain_weight > 0 else None
+    retain_ds = (
+        PicklePromptGenDataset(args.data_path, target_label=0)
+        if args.retain_weight > 0
+        else None
+    )
 
     collate = Collator(tokenizer, args.seq_len)
 
-    forget_sampler = DistributedSampler(forget_ds, num_replicas=world, rank=rank, shuffle=True)
+    forget_sampler = DistributedSampler(
+        forget_ds, num_replicas=world, rank=rank, shuffle=True
+    )
     forget_loader = DataLoader(
         forget_ds,
         batch_size=args.batch_size,
@@ -573,7 +614,9 @@ def main():
     )
 
     if retain_ds is not None:
-        retain_sampler = DistributedSampler(retain_ds, num_replicas=world, rank=rank, shuffle=True)
+        retain_sampler = DistributedSampler(
+            retain_ds, num_replicas=world, rank=rank, shuffle=True
+        )
         retain_loader = DataLoader(
             retain_ds,
             batch_size=args.batch_size,
@@ -587,7 +630,9 @@ def main():
         retain_loader = None
         retain_sampler = None
 
-    optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+    optimizer = torch.optim.AdamW(
+        model.parameters(), lr=args.lr, weight_decay=args.weight_decay
+    )
 
     steps_per_epoch = math.ceil(len(forget_loader) / args.grad_accum)
     total_steps = steps_per_epoch * args.epochs
@@ -595,9 +640,13 @@ def main():
     if args.scheduler == "none":
         scheduler = None
     elif args.scheduler == "linear":
-        scheduler = get_linear_schedule_with_warmup(optimizer, args.warmup_steps, total_steps)
+        scheduler = get_linear_schedule_with_warmup(
+            optimizer, args.warmup_steps, total_steps
+        )
     else:
-        scheduler = get_cosine_schedule_with_warmup(optimizer, args.warmup_steps, total_steps)
+        scheduler = get_cosine_schedule_with_warmup(
+            optimizer, args.warmup_steps, total_steps
+        )
 
     ckpt_dir = Path(args.model_name_or_path)
     if args.resume_optimizer and ckpt_dir.is_dir():
@@ -611,7 +660,9 @@ def main():
         print(f"[data] forget: {len(forget_ds)} examples")
         if retain_ds is not None:
             print(f"[data] retain: {len(retain_ds)} examples")
-        print(f"[train] start_epoch={start_epoch} global_step={global_step} total_steps~={total_steps}")
+        print(
+            f"[train] start_epoch={start_epoch} global_step={global_step} total_steps~={total_steps}"
+        )
 
     # Params list for manual grad handling (FlatParameters under FSDP are fine)
     params = [p for p in model.parameters() if p.requires_grad]
@@ -630,10 +681,14 @@ def main():
 
         pbar = tqdm(forget_loader, disable=not is_rank0(), desc=f"epoch {epoch}")
         for it, batch_forget in enumerate(pbar):
-            batch_forget = {k: v.cuda(non_blocking=True) for k, v in batch_forget.items()}
+            batch_forget = {
+                k: v.cuda(non_blocking=True) for k, v in batch_forget.items()
+            }
 
             # --- compute forget objective grad: J_f = -w_f * L_forget
-            with torch.cuda.amp.autocast(enabled=args.bf16, dtype=torch.bfloat16 if args.bf16 else torch.float16):
+            with torch.cuda.amp.autocast(
+                enabled=args.bf16, dtype=torch.bfloat16 if args.bf16 else torch.float16
+            ):
                 out_f = model(**batch_forget)
                 forget_loss = out_f.loss
                 obj_f = -args.forget_weight * forget_loss
@@ -652,8 +707,13 @@ def main():
                     retain_iter = iter(retain_loader)
                     batch_retain = next(retain_iter)
 
-                batch_retain = {k: v.cuda(non_blocking=True) for k, v in batch_retain.items()}
-                with torch.cuda.amp.autocast(enabled=args.bf16, dtype=torch.bfloat16 if args.bf16 else torch.float16):
+                batch_retain = {
+                    k: v.cuda(non_blocking=True) for k, v in batch_retain.items()
+                }
+                with torch.cuda.amp.autocast(
+                    enabled=args.bf16,
+                    dtype=torch.bfloat16 if args.bf16 else torch.float16,
+                ):
                     out_r = model(**batch_retain)
                     retain_loss = out_r.loss
                     obj_r = args.retain_weight * retain_loss
@@ -717,7 +777,12 @@ def main():
                             postfix["cos"] = log["pcgrad_cos"]
                         if "pcgrad_applied" in log:
                             postfix["proj"] = log["pcgrad_applied"]
-                        pbar.set_postfix({k: f"{v:.4f}" if isinstance(v, float) else v for k, v in postfix.items()})
+                        pbar.set_postfix(
+                            {
+                                k: f"{v:.4f}" if isinstance(v, float) else v
+                                for k, v in postfix.items()
+                            }
+                        )
 
                         if wandb is not None:
                             wandb.log(log, step=global_step)

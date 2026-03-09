@@ -5,7 +5,7 @@ This repository contains code for training and unlearning toxicity in GPT‑2 st
 It includes scripts for:
 
 - Baseline next‑token training on a prompt / generation dataset
-- Gradient‑ascent unlearning of toxic generations
+- Gradient-difference unlearning of toxic generations
 - "I don't know" DPO‑style unlearning (IdkDPO)
 - PCGrad variants of the above objectives
 - Evaluation via toxicity scoring, perplexity, and MMLU
@@ -16,7 +16,7 @@ Repository layout
 
 - train/ – training and unlearning code
 	- gpt2-train.py – FSDP next‑token pretraining / finetuning on a pickle dataset
-	- unlearn_graddiff.py – gradient‑ascent unlearning on label=1 examples (optionally mixed with retain loss)
+	- unlearn_graddiff.py – gradient‑difference unlearning on label=1 examples (optionally mixed with retain loss)
 	- unlearn_idkdpo.py – IdkDPO unlearning that pushes toxic generations toward an "I don't know" response
 	- PCGrad_gradDiff.py, PCGrad_idkdpo.py – PCGrad versions of GradDiff and IdkDPO unlearning
 - eval/ – evaluation utilities
@@ -90,7 +90,7 @@ Edit the paths, model size, and hyperparameters to match your setup.
 Unlearning methods
 ------------------
 
-Gradient‑ascent unlearning (GA):
+Gradient‑difference unlearning (GA):
 
 ```bash
 cd train
