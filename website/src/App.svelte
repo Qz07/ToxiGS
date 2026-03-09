@@ -223,6 +223,24 @@
           </p>
         </article>
       </div>
+
+      <div class="result-images">
+        <figure>
+          <img src="ToxiGS/assets/performance_utility.png" alt="Table showing toxicity score versus WikiText perplexity for different unlearning methods" />
+          <figcaption>
+            Quantitative trade-off between toxicity and WikiText perplexity for
+            the base model and all unlearning variants.
+          </figcaption>
+        </figure>
+
+        <figure>
+          <img src="ToxiGS/assets/membership_inference.png" alt="Membership inference and ROC-AUC curves comparing methods" />
+          <figcaption>
+            Membership inference ROC curves and NLL separation, highlighting the
+            difference between GradDiff-style and idkDPO-style unlearning.
+          </figcaption>
+        </figure>
+      </div>
     </section>
 
     <section id="discussion" class="section two-col">
@@ -261,9 +279,16 @@
         conflict-aware optimization for machine unlearning in language models.
       </p>
       <p>
+        You can read the full paper here:
+        <a href="ToxiGS/assets/ToxiGS_ver1.pdf" target="_blank" rel="noreferrer">
+          Download paper (PDF)
+        </a>
+        .
+      </p>
+      <p>
         Code is available at:
-        <a href="https://github.com/Qz07/ToxiTIGS" target="_blank" rel="noreferrer">
-          github.com/Qz07/ToxiTIGS
+        <a href="https://github.com/Qz07/ToxiGS" target="_blank" rel="noreferrer">
+          github.com/Qz07/ToxiGS
         </a>
         .
       </p>
@@ -391,6 +416,7 @@
     top: 0;
     z-index: 10;
     display: flex;
+    justify-content: center;
     gap: 0.5rem;
     padding: 0.75rem 1.5rem;
     background: rgba(15, 23, 42, 0.9);
@@ -469,6 +495,32 @@
 
   .card p {
     font-size: 0.95rem;
+  }
+
+  .result-images {
+    margin-top: 2.25rem;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 1.75rem;
+    align-items: flex-start;
+  }
+
+  .result-images figure {
+    margin: 0;
+  }
+
+  .result-images img {
+    width: 100%;
+    display: block;
+    border-radius: 0.9rem;
+    border: 1px solid rgba(148, 163, 184, 0.4);
+    box-shadow: 0 18px 40px rgba(15, 23, 42, 0.85);
+  }
+
+  .result-images figcaption {
+    margin-top: 0.6rem;
+    font-size: 0.85rem;
+    color: #cbd5f5;
   }
 
   code {
