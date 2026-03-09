@@ -226,7 +226,7 @@
 
       <div class="result-images">
         <figure>
-          <img src="ToxiGS/assets/performance_utility.png" alt="Table showing toxicity score versus WikiText perplexity for different unlearning methods" />
+          <img src="/ToxiTIGS/assets/performance_utility.png" alt="Table showing toxicity score versus WikiText perplexity for different unlearning methods" />
           <figcaption>
             Quantitative trade-off between toxicity and WikiText perplexity for
             the base model and all unlearning variants.
@@ -234,7 +234,7 @@
         </figure>
 
         <figure>
-          <img src="ToxiGS/assets/membership_inference.png" alt="Membership inference and ROC-AUC curves comparing methods" />
+          <img src="/ToxiTIGS/assets/membership_inference.png" alt="Membership inference and ROC-AUC curves comparing methods" />
           <figcaption>
             Membership inference ROC curves and NLL separation, highlighting the
             difference between GradDiff-style and idkDPO-style unlearning.
@@ -274,13 +274,8 @@
     <section id="paper-code" class="section">
       <h2>6. Paper & Code</h2>
       <p>
-        This website summarizes the paper <strong>"Detoxification via Gradient
-        Surgery"</strong> by Qirui Zheng and Jun-Kun Wang. The work studies
-        conflict-aware optimization for machine unlearning in language models.
-      </p>
-      <p>
         You can read the full paper here:
-        <a href="ToxiGS/assets/ToxiGS_ver1.pdf" target="_blank" rel="noreferrer">
+        <a href="/ToxiTIGS/assets/ToxiGS_ver1.pdf" target="_blank" rel="noreferrer">
           Download paper (PDF)
         </a>
         .

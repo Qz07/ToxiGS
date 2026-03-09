@@ -5,5 +5,11 @@ import { defineConfig } from "vite";
 // For a repo `https://github.com/<user>/ToxiTIGS`, GitHub Pages serves from `/ToxiTIGS/`.
 export default defineConfig({
   base: "/ToxiTIGS/",
+  build: {
+    // Emit the production build directly into the repo-level `docs` folder
+    // so GitHub Pages can serve it from there.
+    outDir: "../docs",
+    emptyOutDir: true,
+  },
   plugins: [svelte()],
 });

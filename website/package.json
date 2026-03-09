@@ -4,6 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "sync-assets": "mkdir -p public/assets && cp ../assets/* public/assets/",
+    "predev": "npm run sync-assets",
+    "prebuild": "npm run sync-assets",
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview"
